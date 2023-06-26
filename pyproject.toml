@@ -27,7 +27,6 @@ push = false
 
 [tool.bumpver.file_patterns]
 "pyproject.toml" = [
-    'version = "{version}"',
     'current_version = "{version}"',
 ]
 "rtrie/__init__.py" = [
