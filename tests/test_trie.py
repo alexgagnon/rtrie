@@ -1,5 +1,5 @@
 import pytest
-from trie import Node, Trie, get_longest_prefix_index, get_longest_prefixes_index
+from rtrie import Node, Trie, get_longest_prefix_index, get_longest_prefixes_index
 from deepdiff import DeepDiff
 
 words = ['Hello', 'Hey', 'I', 'Man', 'Man', 'Manta', 'Manitee', 'There']
