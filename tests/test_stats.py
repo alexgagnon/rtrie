@@ -1,15 +1,5 @@
-from math import floor
-import pytest
 from rtrie.stats import get_median, get_mode
-
-stats = {
-    0: 1,
-    1: 3,
-    2: 2,
-    7: 1
-}
-
-stats_arr = [0, 1, 1, 1, 2, 2, 7]
+import pytest
 
 @pytest.mark.parametrize("input,expected", [
   (None, None),

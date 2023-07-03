@@ -1,10 +1,8 @@
-import sys
-
 def main():
-    if len(sys.argv) > 1:
-      pass
-    else:
-      pass
+  """
+    TODO: allow loading in a file of sorted entries and building a trie from that
+  """
+  print("main")
 
 if __name__ == "__main__":
-    main()
+  main()

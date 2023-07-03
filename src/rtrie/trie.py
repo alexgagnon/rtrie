@@ -6,8 +6,9 @@ from itertools import chain, tee
 from collections import deque
 from collections.abc import MutableMapping
 from array import array
-from typing import Any, Callable, ItemsView, Iterator, Optional, TypeAlias, cast
+from typing import Any, Callable, ItemsView, Iterator, Literal, Optional, TypeAlias, cast
 from rapidfuzz import fuzz
+from rapidfuzz.distance.DamerauLevenshtein import distance
 # from rapidfuzz.distance.Levenshtein import distance
 
 Word: TypeAlias = str | tuple[str, Any]
@@ -16,6 +17,7 @@ Attributes: TypeAlias = Any
 Entry: TypeAlias = tuple[str, 'Node']
 Record: TypeAlias = tuple[str, Attributes]
 Children: TypeAlias = dict[str, 'Node']
+Candidates: TypeAlias = list[tuple[int, str, 'Node']]
 
 def get_filename(string: str) -> str:
     return "".join([x if x.isalnum() else "_" for x in string])
@@ -89,7 +91,7 @@ class Node:
         return string
 
 class StoredNode(Node):
-    __slots__ = ('attributes', 'children', 'saved')
+    __slots__ = ('file')
 
 class Trie(MutableMapping[str, Attributes]):
     def __init__(self, 
@@ -159,11 +161,11 @@ class Trie(MutableMapping[str, Attributes]):
         """
         # if this is a new word, increment the number of words
         # otherwise we are just overwriting attributes which isn't a new word
-        is_new = True
+        is_new = 1
         if node.attributes != None:
-            is_new = False
+            is_new = 0
         node.attributes = value
-        return 1 if is_new else 0
+        return is_new
 
     def _default_delete(self, node: Node) -> int:
         node.attributes = None
@@ -518,43 +520,89 @@ class Trie(MutableMapping[str, Attributes]):
 
         return candidates
 
-    def search(self, word, max_distance: int):
+    def search(self, word, type: Literal['fuzzy', 'edit'] = 'edit', max_distance: int = 0) -> Candidates:
 
         # Pruning phase
         candidates = []
+        offset = 0
+        distance = 0
 
-        stack = deque()
-        if self.root.children != None:
-            for key, node in self.root.children.items():
-                stack.append((key, node))
-
-        while stack:
-            prefix, node = stack.pop()
-            prefix_length = len(key)
-
-            prefix = word[:prefix_length]
-            logging.debug(f"Comparing {prefix} to {word}")
-            previous_row = array('b', range(prefix_length + 1))
-            for i in range(len(prefix) - 1):
-                current_row = array('b', range(prefix_length + 1))
-                current_row[0] = i + 1
-                for j in range(prefix_length - 1):
-                    deletion_cost = previous_row[j + 1] + 1
-                    insertion_cost = current_row[j] + 1
-                    substitution_cost = previous_row[j] if word[i] == prefix[j] else previous_row[j] + 1
-                    current_row[j + 1] = min(deletion_cost,
-                                             insertion_cost, substitution_cost)
-
-                previous_row = current_row
-
-            distance = previous_row[prefix_length - 1]
-            logging.debug(f"Distance: {distance}")
-            if previous_row[prefix_length - 1] < max_distance:
-                if node.children != None:
-                    for key, value in node.children.items():
-                        stack.append((prefix + key, value))
+        if type == 'edit':
+          self._search_edit_recursive(self.root, word, "", offset, distance, max_distance, candidates)
+        else:
+          print('TODO: fuzzy')
 
         return candidates
+
+
+        # stack = deque()
+        # if self.root.children != None:
+        #     for key, node in self.root.children.items():
+        #         stack.append((key, node))
+
+        # while stack:
+        #     prefix, node = stack.pop()
+        #     prefix_length = len(prefix)
+        #     word_fragment = word[offset:prefix_length]
+
+        #     logging.debug(f"Prefix: {prefix}, Word: {word_fragment}")
+        #     score = distance(word_fragment, prefix)
+        #     logging.debug(f"Distance: {score}")
+
+        #     if score < max_distance:
+                
+
+        #     # prefix = word[:prefix_length]
+        #     logging.debug(f"Comparing {prefix} to {word}")
+        #     previous_row = array('b', range(prefix_length + 1))
+        #     for i in range(len(prefix) - 1):
+        #         current_row = array('b', range(prefix_length + 1))
+        #         current_row[0] = i + 1
+        #         for j in range(prefix_length - 1):
+        #             deletion_cost = previous_row[j + 1] + 1
+        #             insertion_cost = current_row[j] + 1
+        #             substitution_cost = previous_row[j] if word[i] == prefix[j] else previous_row[j] + 1
+        #             current_row[j + 1] = min(deletion_cost,
+        #                                      insertion_cost, substitution_cost)
+
+        #         previous_row = current_row
+
+        #     distance = previous_row[prefix_length - 1]
+        #     logging.debug(f"Distance: {distance}")
+        #     if previous_row[prefix_length - 1] < max_distance:
+        #         if node.children != None:
+        #             for key, value in node.children.items():
+        #                 stack.append((prefix + key, value))
+
+        # return candidates
+
+    def _search_edit_recursive(self, node: Node, word: str, prefix: str, offset: int, current_distance: int, max_distance: int, candidates: Candidates) -> Candidates:
+        if node == None or node.children == None or len(node.children) == 0:
+          return
+
+
+
+
+        # TODO: see if we can improve on this, since right now we're doing a lookup for each word and we could be doing lookup
+        # of each fragment of the word that lines up with key
+
+        for child in node.children:
+            fragment = word[offset:offset+len(child)]
+            d = distance(fragment, child)
+
+            # we want to be able to tell if the key has 0 difference
+            total = d + current_distance
+            logging.debug(f"Distance b/w {child} and {fragment}: {d}")
+            logging.debug(f"{current_distance} + {d} = {total}")
+            if total <= max_distance:
+                child_node = node.children[child]
+                new_prefix = prefix + child
+                logging.debug(f"{word}, {new_prefix}, {distance(word, prefix)}")
+                if child_node.attributes != None:
+                    total_distance = distance(word, new_prefix)
+                    if total_distance <= max_distance:
+                        candidates.append((total_distance, child_node))
+                self._search_edit_recursive(child_node, word, new_prefix, offset + len(child), total, max_distance, candidates)
 
     def stats(self, unique: bool = True):
         average_length: int = 0
