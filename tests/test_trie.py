@@ -114,7 +114,7 @@ def test_words():
     words = ["Hey", "There", "Hello", "Hi"]
     trie = Trie(words = iter(sorted(words)))
 
-    assert(DeepDiff(words, list(trie.words())))
+    assert(DeepDiff(words, list(trie)))
     assert(sorted(words) == list(trie.words(sort = True)))
 
 def test_nodes():
