@@ -90,15 +90,9 @@ class Node:
                 f"{key}({child.attributes}): {child.print(depth+1)}"
         return string
 
-class StoredNode(Node):
-    __slots__ = ('file')
-
 class Trie(MutableMapping[str, Attributes]):
     def __init__(self, 
                  root: Node | None=None, 
-                 add_word: Optional[Callable[[Node, Attributes], int]]=None, 
-                 delete_word: Optional[Callable[[Node], int]]=None, 
-                 count: Optional[Callable[[Node], int]]=None, 
                  depth_to_store: Optional[int]=None, 
                  words: Optional[Words] = None, 
                  subtrie_path: str='./subtrie'):
@@ -117,9 +111,6 @@ class Trie(MutableMapping[str, Attributes]):
         """
 
         self.root = root if root != None else Node()
-        self._add = add_word if add_word != None else self._default_add
-        self._delete = delete_word if delete_word != None else self._default_delete
-        self._count = count if count != None else self._default_count
         self.num_words: int = 0
         self.depth_to_store = depth_to_store
         self.subtrie_path = subtrie_path
@@ -155,7 +146,7 @@ class Trie(MutableMapping[str, Attributes]):
     def __iter__(self):
         return self.words()
 
-    def _default_add(self, node: Node, value: Attributes) -> int:
+    def add_attributes(self, node: Node, value: Attributes) -> int:
         """
           The default add method to use when one isn't provided. It uses True/None to indicate whether a node is a word or not
         """
@@ -167,11 +158,11 @@ class Trie(MutableMapping[str, Attributes]):
         node.attributes = value
         return is_new
 
-    def _default_delete(self, node: Node) -> int:
+    def delete_attributes(self, node: Node) -> int:
         node.attributes = None
         return -1
 
-    def _default_count(self, node: Node) -> int:
+    def count_attributes(self, node: Node) -> int:
         return 1
 
     def add(self, word: str, attributes: Attributes=True):
@@ -193,13 +184,13 @@ class Trie(MutableMapping[str, Attributes]):
                 logging.debug(
                     f'Empty children, adding "{word}" with `attributes = {attributes}')
                 current.children[word] = Node()
-                self.num_words += self._add(current.children[word], attributes)
+                self.num_words += self.add_attributes(current.children[word], attributes)
                 break
 
             elif word in current.children.keys():
                 logging.debug(
                     f'"{word}" already exists, adding attributes {attributes}')
-                self.num_words += self._add(current.children[word], attributes)
+                self.num_words += self.add_attributes(current.children[word], attributes)
                 break
 
             else:
@@ -235,7 +226,7 @@ class Trie(MutableMapping[str, Attributes]):
                             logging.debug(
                                 f'Creating new node "{prefix}", is it a word: {is_word}')
                             current.children[prefix] = Node(None, Children())
-                            self.num_words += self._add(
+                            self.num_words += self.add_attributes(
                                 current.children[prefix], attributes if is_word else None)
                             
                             # we know this is set to empty dict from above
@@ -255,7 +246,7 @@ class Trie(MutableMapping[str, Attributes]):
                         f'No overlapping prefixes in any key, adding "{word}" with `attributes` = {attributes}')
                     if current.children != None:
                         current.children[word] = Node()
-                        self.num_words += self._add(
+                        self.num_words += self.add_attributes(
                             current.children[word], attributes)
                     break
 
@@ -267,7 +258,7 @@ class Trie(MutableMapping[str, Attributes]):
             if word in current.children:
                 # handle node shifts
 
-                self._delete(node)
+                self.delete_attributes(node)
                 return
 
             for i in range(0, len(word)):
@@ -370,7 +361,7 @@ class Trie(MutableMapping[str, Attributes]):
                 logging.debug(
                     f"Adding word {first_label} with attributes {first_attributes}")
                 current.children[first_label] = Node()
-                self.num_words += self._add(
+                self.num_words += self.add_attributes(
                     current.children[first_label], first_attributes)
                 if last == None:
                     return
@@ -408,7 +399,7 @@ class Trie(MutableMapping[str, Attributes]):
                             break
                         logging.debug(
                             f"Adding word {label} with attributes {attributes}")
-                        self.num_words += self._add(
+                        self.num_words += self.add_attributes(
                             current.children[prefix], attributes)
                         word = next(matches, None)
 
@@ -638,7 +629,7 @@ class Trie(MutableMapping[str, Attributes]):
                 # it's a word, so 'prefix' is the full word
                 length = len(prefix)
 
-                count = 1 if unique else self._count(node)
+                count = 1 if unique else self.count_attributes(node)
 
                 # TODO: just compute afterwards based on word lengths?
                 average_length += length * count

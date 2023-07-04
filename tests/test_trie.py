@@ -1,9 +1,10 @@
 import pytest
 from rtrie import Node, Trie, get_longest_prefix_index, get_longest_prefixes_index
 from deepdiff import DeepDiff
-
+        
 words = ['Hello', 'Hey', 'I', 'Man', 'Man', 'Manta', 'Manitee', 'There']
 add_words = ['Hell', 'M', 'Man', 'Theres']
+
 def test_trie():
     trie = Trie()
     trie.add_words(iter(words))
@@ -27,12 +28,17 @@ def test_single_item():
     expected["Hello"] = Node(True)
     assert(DeepDiff(trie.root.children, expected) == {})
 
+
 def adder(node, value):
     node.attributes = 'hello!'
     return 1
 
+class CustomTrie(Trie):
+    def add_attributes(self, node, value):
+        return adder(node, value)
+
 def test_custom_adder():
-    trie = Trie(None, adder)
+    trie = CustomTrie(None)
     trie.add("Hello")
     expected = {}
     expected["Hello"] = Node('hello!')
