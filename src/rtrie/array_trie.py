@@ -29,7 +29,6 @@ class ArrayTrie(Trie):
     def delete_attributes(self, node, value):
         # TODO
         NotImplemented()
-        pass
 
     def count_attributes(self, value):
         return len(value) if value != None else 0

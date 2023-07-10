@@ -23,7 +23,7 @@ class StringTrie(Trie):
 
     def delete_attributes(self, node, value):
         # TODO
-        pass
+        NotImplemented()        
 
     def count_attributes(self, value):
         return len(value.split(self.separator)) if value != None else 0
