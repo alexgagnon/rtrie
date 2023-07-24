@@ -1,6 +1,6 @@
 import collections
 from typing import Any
-from .trie import Trie, Node
+from . import Trie, Node
 
 class ArrayTrie(Trie):
     def __init__(self, no_array_for_single_value: bool = False, **kwargs):

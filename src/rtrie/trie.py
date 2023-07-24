@@ -18,10 +18,7 @@ Entry: TypeAlias = tuple[str, 'Node']
 Record: TypeAlias = tuple[str, Attributes]
 Children: TypeAlias = dict[str, 'Node']
 Candidates: TypeAlias = list[tuple[int, str, 'Node']]
-
-def get_filename(string: str) -> str:
-    return "".join([x if x.isalnum() else "_" for x in string])
-
+AdditionalAttributes: TypeAlias = Optional[dict[str, Any]]
 
 def get_longest_prefix_index(word1: str, word2: str):
     """
@@ -67,11 +64,19 @@ def _get_values(element: Word) -> Record:
         print(element[0])
         return ("null", -1)
 
+# class NodeFactory:
+#     @staticmethod
+#     def create_node(attributes: Attributes = None, children: Optional[Children] = None) -> Node:
+        
 class Node:
     # avoid storing class attributes in '__dict__' to save memory
     __slots__ = ('attributes', 'children')
 
-    def __init__(self, attributes: Attributes = None, children: Optional[Children] = None):
+    attributes: Attributes
+    children: Children
+    __extras__: AdditionalAttributes
+
+    def __init__(self, attributes: Attributes = None, children: Optional[Children] = None, *args, **kwargs):
         self.attributes = attributes
         self.children = children
 
@@ -90,12 +95,20 @@ class Node:
                 f"{key}({child.attributes}): {child.print(depth+1)}"
         return string
 
+class StoredNode(Node):
+    __slots__ = ('filename')
+
+    filename: str
+
+    def __init__(self, attributes: Attributes = None, children: Optional[Children] = None, filename: str = None, *args, **kwargs):
+        super().__init__(attributes, children, *args, **kwargs)
+        self.filename = filename
+
 class Trie(MutableMapping[str, Attributes]):
     def __init__(self, 
                  root: Node | None=None, 
-                 depth_to_store: Optional[int]=None, 
-                 words: Optional[Words] = None, 
-                 subtrie_path: str='./subtrie'):
+                 words: Optional[Words] = None,
+                ):
         """
             Initialize a Trie.
 
@@ -112,10 +125,10 @@ class Trie(MutableMapping[str, Attributes]):
 
         self.root = root if root != None else Node()
         self.num_words: int = 0
-        self.depth_to_store = depth_to_store
-        self.subtrie_path = subtrie_path
-        if self.depth_to_store != None:
-            os.mkdir(self.subtrie_path)
+        # self.depth_to_store = depth_to_store
+        # self.subtrie_path = subtrie_path
+        # if self.depth_to_store != None:
+        #     os.mkdir(self.subtrie_path)
         if words:
             self.add_words(words)
 
@@ -145,6 +158,10 @@ class Trie(MutableMapping[str, Attributes]):
 
     def __iter__(self):
         return self.words()
+    
+    def post_add_node(self, **kwargs):
+        print(kwargs["label"], kwargs["depth"])
+        # pass
 
     def add_attributes(self, node: Node, value: Attributes) -> int:
         """
@@ -251,22 +268,23 @@ class Trie(MutableMapping[str, Attributes]):
                     break
 
     def delete(self, word: str):
-        prev: Node | None = None
-        current = self.root
+        NotImplemented()
+        # prev: Node | None = None
+        # current = self.root
 
-        while current != None:
-            if word in current.children:
-                # handle node shifts
+        # while current != None:
+        #     if word in current.children:
+        #         # handle node shifts
 
-                self.delete_attributes(node)
-                return
+        #         self.delete_attributes(node)
+        #         return
 
-            for i in range(0, len(word)):
-                w = word[:i]
-                if w in node.children:
-                    logging.debug(f"Prefix: {prefix}, Word: {word}")
-                    prev = current
-                    current = current.children[w]
+        #     for i in range(0, len(word)):
+        #         w = word[:i]
+        #         if w in node.children:
+        #             logging.debug(f"Prefix: {prefix}, Word: {word}")
+        #             prev = current
+        #             current = current.children[w]
 
     def add_words(self, words: Words):
         """
@@ -329,11 +347,11 @@ class Trie(MutableMapping[str, Attributes]):
 
     def _add_words_recursive(self, words: Words, current: Node, offset: int, depth: int):
         """
-          Pure recursive method for adding list of sorted words.
+          Pure recursive method for adding sorted list of words.
 
           `words` must be an iterator so that `next` is available
 
-          TODO: could create subtries in parallel to speed it up
+          TODO: potentially could create subtries in parallel to speed it up
         """
 
         while 1:
@@ -346,8 +364,8 @@ class Trie(MutableMapping[str, Attributes]):
                 logging.debug("No matches - base case")
                 return
 
-            # handle the matches, then continue where it left off
             words = cast(Words, chain([last], words))
+
             if (current.children == None):
                 current.children = {}
 
@@ -363,6 +381,7 @@ class Trie(MutableMapping[str, Attributes]):
                 current.children[first_label] = Node()
                 self.num_words += self.add_attributes(
                     current.children[first_label], first_attributes)
+                self.post_add_node(node = current, label = first_label_copy, prefix = '', depth = depth, max_length = 0)
                 if last == None:
                     return
                 continue
@@ -371,6 +390,7 @@ class Trie(MutableMapping[str, Attributes]):
             else:
                 logging.debug("Multiple matches")
 
+                # test if they are all the same word
                 # since it's a sorted list, we can do this by comparing the first
                 # and last words
                 last_label = _get_values(matches[-1])[0]
@@ -403,33 +423,22 @@ class Trie(MutableMapping[str, Attributes]):
                             current.children[prefix], attributes)
                         word = next(matches, None)
 
+                    # if it's the end of the iter we're done
                     if word != None:
                         matches = chain([word], matches)
 
                 # otherwise, it's just a node
                 else:
-                    logging.debug("Prefix is not a word, just recurse")
+                    logging.debug("Prefix is not a word")
 
                 logging.debug("Recursing...")
                 self._add_words_recursive(
                     matches, current.children[prefix], offset + prefix_length, depth + 1)
-
-                # dump to storage if specified
-                if (self.depth_to_store != None and depth == self.depth_to_store):
-                    filename = get_filename(first_label_copy)
-                    logging.info(
-                        f"Moving trie at '{first_label}' as '{filename}' to file")
-                    # TODO: investigate mmap instead of pickling
-                    with open(f"{self.subtrie_path}/{filename}.pickle", 'wb') as file:
-                        pickle.dump(current, file)
-                    # cleanup memory
-                    del current.children[prefix]
-                    gc.collect()
-
+                self.post_add_node(node = current, label = first_label_copy[:offset + prefix_length], prefix = prefix, depth = depth, max_length = 0)
+  
             if last == None:
                 break
 
-        logging.debug("End")
 
     def words(self, sort: bool =False) -> Iterator[str]:
         """
@@ -489,28 +498,6 @@ class Trie(MutableMapping[str, Attributes]):
             if (node.attributes != None):
                 yield (prefix, node.attributes) # type: ignore
 
-    def search1(self, word, threshold):
-        candidates = []
-
-        stack = deque()
-        if self.root.children != None:
-            for key, node in self.root.children.items():
-                stack.append((key, node))
-
-        while stack:
-            prefix, node = stack.pop()
-            similarity = fuzz.ratio(word[:len(prefix)], prefix)
-            # logging.debug(f"{word[:len(prefix)]} <> {prefix}: {similarity}")
-            if similarity >= threshold:
-                if node.attributes != None:
-                    candidates.append((similarity, prefix, node))
-
-                if node.children != None:
-                    for key, value in reversed(sorted(node.children.items())):
-                        stack.append((prefix + key, value))
-
-        return candidates
-
     def search(self, word, type: Literal['fuzzy', 'edit'] = 'edit', max_distance: int = 0) -> Candidates:
 
         # Pruning phase
@@ -522,60 +509,13 @@ class Trie(MutableMapping[str, Attributes]):
           self._search_edit_recursive(self.root, word, "", offset, distance, max_distance, candidates)
         else:
           print('TODO: fuzzy')
+          NotImplemented()
 
         return candidates
-
-
-        # stack = deque()
-        # if self.root.children != None:
-        #     for key, node in self.root.children.items():
-        #         stack.append((key, node))
-
-        # while stack:
-        #     prefix, node = stack.pop()
-        #     prefix_length = len(prefix)
-        #     word_fragment = word[offset:prefix_length]
-
-        #     logging.debug(f"Prefix: {prefix}, Word: {word_fragment}")
-        #     score = distance(word_fragment, prefix)
-        #     logging.debug(f"Distance: {score}")
-
-        #     if score < max_distance:
-                
-
-        #     # prefix = word[:prefix_length]
-        #     logging.debug(f"Comparing {prefix} to {word}")
-        #     previous_row = array('b', range(prefix_length + 1))
-        #     for i in range(len(prefix) - 1):
-        #         current_row = array('b', range(prefix_length + 1))
-        #         current_row[0] = i + 1
-        #         for j in range(prefix_length - 1):
-        #             deletion_cost = previous_row[j + 1] + 1
-        #             insertion_cost = current_row[j] + 1
-        #             substitution_cost = previous_row[j] if word[i] == prefix[j] else previous_row[j] + 1
-        #             current_row[j + 1] = min(deletion_cost,
-        #                                      insertion_cost, substitution_cost)
-
-        #         previous_row = current_row
-
-        #     distance = previous_row[prefix_length - 1]
-        #     logging.debug(f"Distance: {distance}")
-        #     if previous_row[prefix_length - 1] < max_distance:
-        #         if node.children != None:
-        #             for key, value in node.children.items():
-        #                 stack.append((prefix + key, value))
-
-        # return candidates
 
     def _search_edit_recursive(self, node: Node, word: str, prefix: str, offset: int, current_distance: int, max_distance: int, candidates: Candidates) -> Candidates:
         if node == None or node.children == None or len(node.children) == 0:
           return
-
-
-
-
-        # TODO: see if we can improve on this, since right now we're doing a lookup for each word and we could be doing lookup
-        # of each fragment of the word that lines up with key
 
         for child in node.children:
             fragment = word[offset:offset+len(child)]
@@ -592,7 +532,7 @@ class Trie(MutableMapping[str, Attributes]):
                 if child_node.attributes != None:
                     total_distance = distance(word, new_prefix)
                     if total_distance <= max_distance:
-                        candidates.append((total_distance, child_node))
+                        candidates.append((total_distance, new_prefix, child_node))
                 self._search_edit_recursive(child_node, word, new_prefix, offset + len(child), total, max_distance, candidates)
 
     def stats(self, unique: bool = True):

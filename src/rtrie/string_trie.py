@@ -1,5 +1,5 @@
 from typing import Any
-from .trie import Trie, Node
+from . import Trie, Node
 
 class StringTrie(Trie):
     def __init__(self, separator: str = "|", **kwargs):
