@@ -9,7 +9,6 @@ from array import array
 from typing import Any, Callable, ItemsView, Iterator, Literal, Optional, TypeAlias, cast
 from rapidfuzz import fuzz
 from rapidfuzz.distance.DamerauLevenshtein import distance
-# from rapidfuzz.distance.Levenshtein import distance
 
 Word: TypeAlias = str | tuple[str, Any]
 Words: TypeAlias = Iterator[Word]
@@ -21,7 +20,6 @@ Candidates: TypeAlias = list[tuple[int, str, 'Node']]
 
 def get_filename(string: str) -> str:
     return "".join([x if x.isalnum() else "_" for x in string])
-
 
 def get_longest_prefix_index(word1: str, word2: str):
     """

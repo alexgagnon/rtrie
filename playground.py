@@ -33,5 +33,4 @@ words = (w for w in words)
 # print([(x[0], x[1].attributes) for x in candidates])
 
 trie2 = ArrayTrie(words = words, no_array_for_single_value=True)
-print('hello')
 print(trie2)
