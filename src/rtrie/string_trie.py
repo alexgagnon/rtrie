@@ -19,11 +19,7 @@ class StringTrie(Trie):
             if value in values:
                 return 0
             node.attributes = f"{node.attributes}{self.separator}{str(value)}"
-            return 1
-
-    def delete_attributes(self, node, value):
-        # TODO
-        NotImplemented()        
+            return 1      
 
     def count_attributes(self, value):
         return len(value.split(self.separator)) if value != None else 0

@@ -7,7 +7,7 @@ from rtrie.string_trie import StringTrie
 level = logging.DEBUG if os.environ.get("DEBUG") == "True" else logging.INFO
 logging.basicConfig(level = level)
 
-words = ['Hello', 'Hey', 'Man', 'Man', 'Mani', 'Manilla', 'Manitee', 'There']
+words = ['Hello', 'Hey', 'Man', 'Man', 'Mani', 'Manilla', 'Manitee', 'Q', 'There']
 words = [(word, i) for i, word in enumerate(words)]
 words = (w for w in words)
 # trie = StringTrie(words=words)

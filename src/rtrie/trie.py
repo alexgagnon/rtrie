@@ -160,8 +160,7 @@ class Trie(MutableMapping[str, Attributes]):
         return self.words()
     
     def post_add_node(self, **kwargs):
-        print(kwargs["label"], kwargs["depth"])
-        # pass
+        pass
 
     def add_attributes(self, node: Node, value: Attributes) -> int:
         """
@@ -336,8 +335,8 @@ class Trie(MutableMapping[str, Attributes]):
                     logging.debug("No matching prefix")
                     break
             except IndexError:
-                # TODO: fix this, it seems to be when a following word is shorted than the first?
-                logging.warn(current)
+                # TODO: fix this, it seems to be when a following word is shorter than the first?
+                logging.warn(first_label, current)
                 current = next(words, None)
 
         logging.debug(f"Matches: {matches}, last: {current}")
