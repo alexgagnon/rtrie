@@ -7,16 +7,16 @@ from collections import deque
 from collections.abc import MutableMapping
 from array import array
 from typing import Any, Callable, ItemsView, Iterator, Literal, Optional, TypeAlias, cast
-from rapidfuzz import fuzz
+from rapidfuzz.fuzz import ratio
 from rapidfuzz.distance.DamerauLevenshtein import distance
 
 Word: TypeAlias = str | tuple[str, Any]
 Words: TypeAlias = Iterator[Word]
 Attributes: TypeAlias = Any
-Entry: TypeAlias = tuple[str, 'Node']
+Entry: TypeAlias = tuple[str, 'AttributeNode']
 Record: TypeAlias = tuple[str, Attributes]
-Children: TypeAlias = dict[str, 'Node']
-Candidates: TypeAlias = list[tuple[int, str, 'Node']]
+Children: TypeAlias = dict[str, 'AttributeNode']
+Candidates: TypeAlias = list[tuple[int, str, 'AttributeNode']]
 AdditionalAttributes: TypeAlias = Optional[dict[str, Any]]
 
 def get_filename(string: str) -> str:
@@ -37,7 +37,7 @@ def get_longest_prefix_index(word1: str, word2: str):
 
 def get_longest_prefixes_index(words: list[str]):
     """
-        Returns the length of the longest prefix in a sorted list of words
+        Returns the index of the longest prefix in a sorted list of words
     """
     if len(words) == 0:
         return 0
@@ -60,17 +60,21 @@ def get_longest_prefixes_index(words: list[str]):
 
 
 def _get_values(element: Word) -> Record:
+    """
+      Get the value stored in a Node
+    """
     try:
         return (element[0], element[1]) if isinstance(element, tuple) else (element, True)
     except IndexError:
         print(element[0])
         return ("null", -1)
 
-# class NodeFactory:
-#     @staticmethod
-#     def create_node(attributes: Attributes = None, children: Optional[Children] = None) -> Node:
-        
 class Node:
+    """
+      Base Node type
+    """
+
+class AttributeNode(Node):
     # avoid storing class attributes in '__dict__' to save memory
     __slots__ = ('attributes', 'children')
 
@@ -88,11 +92,11 @@ class Node:
     def print(self, depth: int):
         if self.children == None:
             return ""
-        offset = "\t"*depth
+        offset = "\t" * depth
         string = ""
         for item in self.children.items():
             key: str = item[0]
-            child: Node = item[1]
+            child: AttributeNode = item[1]
             string += "\n" + offset + "\t" + \
                 f"{key}({child.attributes}): {child.print(depth+1)}"
         return string
@@ -108,7 +112,7 @@ class StoredNode(Node):
 
 class Trie(MutableMapping[str, Attributes]):
     def __init__(self, 
-                 root: Node | None=None, 
+                 root: AttributeNode | None=None, 
                  words: Optional[Words] = None,
                 ):
         """
@@ -121,11 +125,9 @@ class Trie(MutableMapping[str, Attributes]):
             special cases for when words conflict or requiring merging of attributes, i.e. if `attributes` is an object and you add
             a word that already exists with other attributes, you may want to overwrite, merge, etc. The default is to simply assign
             the value `True`, indicating it is a word, and adding the same word again will not affect the trie.
-
-            NOTE: if you supply custom add_word and delete_word functions, they MUST manage the `num_words` property if you want `len(trie)` to report the correct value.
         """
 
-        self.root = root if root != None else Node()
+        self.root = root if root != None else AttributeNode()
         self.num_words: int = 0
         # self.depth_to_store = depth_to_store
         # self.subtrie_path = subtrie_path
@@ -164,7 +166,7 @@ class Trie(MutableMapping[str, Attributes]):
     def post_add_node(self, **kwargs):
         pass
 
-    def add_attributes(self, node: Node, value: Attributes) -> int:
+    def add_attributes(self, node: AttributeNode, value: Attributes) -> int:
         """
           The default add method to use when one isn't provided. It uses True/None to indicate whether a node is a word or not
         """
@@ -176,18 +178,18 @@ class Trie(MutableMapping[str, Attributes]):
         node.attributes = value
         return is_new
 
-    def delete_attributes(self, node: Node) -> int:
+    def delete_attributes(self, node: AttributeNode) -> int:
         node.attributes = None
         return -1
 
-    def count_attributes(self, node: Node) -> int:
+    def count_attributes(self, node: AttributeNode) -> int:
         return 1
 
     def add(self, word: str, attributes: Attributes=True):
         """
           Adds a single word to an already constructed Trie. You should use `add_words` to initialize a Trie for performance reasons
         """
-        current: Node = self.root
+        current: AttributeNode = self.root
 
         while True:
             logging.debug(f'Adding "{word}"')
@@ -201,7 +203,7 @@ class Trie(MutableMapping[str, Attributes]):
             if len(current.children.keys()) == 0:
                 logging.debug(
                     f'Empty children, adding "{word}" with `attributes = {attributes}')
-                current.children[word] = Node()
+                current.children[word] = AttributeNode()
                 self.num_words += self.add_attributes(current.children[word], attributes)
                 break
 
@@ -243,7 +245,7 @@ class Trie(MutableMapping[str, Attributes]):
                             is_word = len(prefix) == len(word)
                             logging.debug(
                                 f'Creating new node "{prefix}", is it a word: {is_word}')
-                            current.children[prefix] = Node(None, Children())
+                            current.children[prefix] = AttributeNode(None, Children())
                             self.num_words += self.add_attributes(
                                 current.children[prefix], attributes if is_word else None)
                             
@@ -263,29 +265,13 @@ class Trie(MutableMapping[str, Attributes]):
                     logging.debug(
                         f'No overlapping prefixes in any key, adding "{word}" with `attributes` = {attributes}')
                     if current.children != None:
-                        current.children[word] = Node()
+                        current.children[word] = AttributeNode()
                         self.num_words += self.add_attributes(
                             current.children[word], attributes)
                     break
 
     def delete(self, word: str):
         NotImplemented()
-        # prev: Node | None = None
-        # current = self.root
-
-        # while current != None:
-        #     if word in current.children:
-        #         # handle node shifts
-
-        #         self.delete_attributes(node)
-        #         return
-
-        #     for i in range(0, len(word)):
-        #         w = word[:i]
-        #         if w in node.children:
-        #             logging.debug(f"Prefix: {prefix}, Word: {word}")
-        #             prev = current
-        #             current = current.children[w]
 
     def add_words(self, words: Words):
         """
@@ -346,7 +332,7 @@ class Trie(MutableMapping[str, Attributes]):
         # return it as a list so we can use len() on it
         return (matches, current)
 
-    def _add_words_recursive(self, words: Words, current: Node, offset: int, depth: int):
+    def _add_words_recursive(self, words: Words, current: AttributeNode, offset: int, depth: int):
         """
           Pure recursive method for adding sorted list of words.
 
@@ -379,7 +365,7 @@ class Trie(MutableMapping[str, Attributes]):
                 logging.debug("Single match - normal case")
                 logging.debug(
                     f"Adding word {first_label} with attributes {first_attributes}")
-                current.children[first_label] = Node()
+                current.children[first_label] = AttributeNode()
                 self.num_words += self.add_attributes(
                     current.children[first_label], first_attributes)
                 self.post_add_node(node = current, label = first_label_copy, prefix = '', depth = depth, max_length = 0)
@@ -404,7 +390,7 @@ class Trie(MutableMapping[str, Attributes]):
 
                 # create a node for the longest matching prefix...
                 # the next step decides if it's a word or not
-                current.children[prefix] = Node()
+                current.children[prefix] = AttributeNode()
 
                 matches = iter(matches)
 
@@ -471,10 +457,10 @@ class Trie(MutableMapping[str, Attributes]):
                 for key, value in items:
                     stack.append((prefix + key, value))
 
-    def _get_node(self, word: str) -> tuple[Record, Node | None] | None:
+    def _get_node(self, word: str) -> tuple[Record, AttributeNode | None] | None:
         return self._get_node_recursive(self.root, None, word, "")
 
-    def _get_node_recursive(self, node: Node, previous_node: Optional[Node], word: str, prefix: str) -> Optional[tuple[Entry, Optional[Node]]]:
+    def _get_node_recursive(self, node: AttributeNode, previous_node: Optional[AttributeNode], word: str, prefix: str) -> Optional[tuple[Entry, Optional[AttributeNode]]]:
         if node.children != None:
             if (word in node.children):
                 return ((prefix + word, node.children[word]), previous_node)
@@ -489,7 +475,7 @@ class Trie(MutableMapping[str, Attributes]):
             return None
         return None
 
-    # TODO: this returns a generator which technically isn't correct
+    # TODO: this returns a generator which technically isn't correct, but works for most cases
     def items(self) -> ItemsView[str, Attributes]:
         """
             Method to make it interoperable with dict, where keys are the words, and values are the attributes
@@ -497,9 +483,9 @@ class Trie(MutableMapping[str, Attributes]):
         
         for prefix, node in self.nodes():
             if (node.attributes != None):
-                yield (prefix, node.attributes) # type: ignore
+                yield (prefix, node.attributes)
 
-    def search(self, word, type: Literal['fuzzy', 'edit'] = 'edit', max_distance: int = 0) -> Candidates:
+    def search(self, word, type: Literal['fuzzy', 'edit'] = 'edit', threshold: int | float = 0) -> Candidates:
 
         # Pruning phase
         candidates = []
@@ -507,19 +493,19 @@ class Trie(MutableMapping[str, Attributes]):
         distance = 0
 
         if type == 'edit':
-          self._search_edit_recursive(self.root, word, "", offset, distance, max_distance, candidates)
+          self._search_edit_recursive(self.root, word, "", offset, distance, int(threshold), candidates)
         else:
-          print('TODO: fuzzy')
-          NotImplemented()
+          self._search_fuzzy_recursive(self.root, word, "", offset, distance, threshold, candidates)
 
         return candidates
 
-    def _search_edit_recursive(self, node: Node, word: str, prefix: str, offset: int, current_distance: int, max_distance: int, candidates: Candidates) -> Candidates:
+    def _search_edit_recursive(self, node: AttributeNode, word: str, prefix: str, offset: int, current_distance: int, max_distance: int, candidates: Candidates) -> Candidates:
         if node == None or node.children == None or len(node.children) == 0:
           return
 
         for child in node.children:
-            fragment = word[offset:offset+len(child)]
+            new_offset = offset + len(child)
+            fragment = word[offset:new_offset]
             d = distance(fragment, child)
 
             # we want to be able to tell if the key has 0 difference
@@ -527,14 +513,35 @@ class Trie(MutableMapping[str, Attributes]):
             logging.debug(f"Distance b/w {child} and {fragment}: {d}")
             logging.debug(f"{current_distance} + {d} = {total}")
             if total <= max_distance:
+                # child_node = node.children[child]
+                # new_prefix = prefix + child
+                # logging.debug(f"{word}, {new_prefix}, {distance(word, prefix)}")
+                # if child_node.attributes != None:
+                #     total_distance = distance(word, new_prefix)
+                #     if total_distance <= max_distance:
+                #         candidates.append((total_distance, new_prefix, child_node))
                 child_node = node.children[child]
-                new_prefix = prefix + child
-                logging.debug(f"{word}, {new_prefix}, {distance(word, prefix)}")
                 if child_node.attributes != None:
-                    total_distance = distance(word, new_prefix)
-                    if total_distance <= max_distance:
-                        candidates.append((total_distance, new_prefix, child_node))
-                self._search_edit_recursive(child_node, word, new_prefix, offset + len(child), total, max_distance, candidates)
+                    candidates.append((total,  prefix, child_node))
+                new_prefix = prefix + child
+
+                self._search_edit_recursive(child_node, word, new_prefix, new_offset, total, max_distance, candidates)
+
+    def _search_fuzzy_recursive(self, node: AttributeNode, word: str, prefix: str, offset: int, current_distance: int, threshold: float, candidates: Candidates) -> Candidates:
+        # naive approach, test each node until it not longer meets the treshhold
+        if node == None or node.children == None or len(node.children) == 0:
+            return
+        
+        for child in node.children:
+            new_prefix = prefix + child
+            r = ratio(word, new_prefix)
+            logging.debug(f"Search word: {word}, Prefix: {new_prefix}, Ratio: {r}")
+            if r >= threshold:
+                child_node = node.children[child]
+                if child_node.attributes != None:
+                    candidates.append((r, new_prefix, child_node))
+
+                self._search_fuzzy_recursive(child_node, word, new_prefix, offset + len(child), None, threshold, candidates)  
 
     def stats(self, unique: bool = True):
         average_length: int = 0
@@ -548,7 +555,7 @@ class Trie(MutableMapping[str, Attributes]):
 
         # initialize the stack
         prefix = ""
-        stack: deque[tuple[str, Node, int]] = deque()
+        stack: deque[tuple[str, AttributeNode, int]] = deque()
         if self.root.children != None:
             items = self.root.children.items()
             node_distribution[1] = len(items)
@@ -586,8 +593,7 @@ class Trie(MutableMapping[str, Attributes]):
 
             if node.children != None:
                 items = node.children.items()
-                node_distribution[depth +
-                                  1] = node_distribution.get(depth + 1, 0) + len(items)
+                node_distribution[depth + 1] = node_distribution.get(depth + 1, 0) + len(items)
                 for key, value in items:
                     stack.append((prefix + key, value, depth + 1))
 

@@ -1,5 +1,5 @@
 import pytest
-from rtrie import Node, Trie, get_longest_prefix_index, get_longest_prefixes_index
+from rtrie import AttributeNode, Trie, get_longest_prefix_index, get_longest_prefixes_index
 from deepdiff import DeepDiff
         
 words = ['Hello', 'Hey', 'I', 'Man', 'Man', 'Manta', 'Manitee', 'There']
@@ -25,7 +25,7 @@ def test_single_item():
     trie = Trie()
     trie.add("Hello")
     expected = {}
-    expected["Hello"] = Node(True)
+    expected["Hello"] = AttributeNode(True)
     assert(DeepDiff(trie.root.children, expected) == {})
 
 
@@ -41,7 +41,7 @@ def test_custom_adder():
     trie = CustomTrie(None)
     trie.add("Hello")
     expected = {}
-    expected["Hello"] = Node('hello!')
+    expected["Hello"] = AttributeNode('hello!')
     assert(DeepDiff(trie.root.children, expected) == {})   
 
 def test_two_unique_items():
@@ -49,8 +49,8 @@ def test_two_unique_items():
     trie.add("Hello")
     trie.add("There")
     expected = {}
-    expected["Hello"] = Node(True)
-    expected["There"] = Node(True)
+    expected["Hello"] = AttributeNode(True)
+    expected["There"] = AttributeNode(True)
     assert(DeepDiff(trie.root.children, expected) == {})
 
 def test_word_longer_than_existing_key():
@@ -58,7 +58,7 @@ def test_word_longer_than_existing_key():
     trie.add("Man")
     trie.add("Manitoba")
     expected = {}
-    expected["Man"] = Node(True, {'itoba': Node(True)})
+    expected["Man"] = AttributeNode(True, {'itoba': AttributeNode(True)})
     assert(DeepDiff(trie.root.children, expected) == {})
 
 def test_word_exactly_key():
@@ -66,7 +66,7 @@ def test_word_exactly_key():
     trie.add("Man")
     trie.add("Man")
     expected = {}
-    expected["Man"] = Node(True)
+    expected["Man"] = AttributeNode(True)
     assert(DeepDiff(trie.root.children, expected) == {})
 
 def test_shared_prefix():
@@ -74,7 +74,7 @@ def test_shared_prefix():
     trie.add("Manta")
     trie.add("Manitoba")
     expected = {}
-    expected["Man"] = Node(None, {'ta': Node(True), 'itoba': Node(True)})
+    expected["Man"] = AttributeNode(None, {'ta': AttributeNode(True), 'itoba': AttributeNode(True)})
     assert(DeepDiff(trie.root.children, expected) == {})
 
 def test_shared_prefix_exact():
@@ -83,7 +83,7 @@ def test_shared_prefix_exact():
     trie.add("Manitoba")
     trie.add("Man")
     expected = {}
-    expected["Man"] = Node(True, {'ta': Node(True), 'itoba': Node(True)})
+    expected["Man"] = AttributeNode(True, {'ta': AttributeNode(True), 'itoba': AttributeNode(True)})
     assert(DeepDiff(trie.root.children, expected) == {})
 
 def test_contains():

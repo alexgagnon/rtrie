@@ -19,3 +19,4 @@ words = (w for w in words)
 
 trie2 = ArrayTrie(words = words, no_array_for_single_value=True)
 print(trie2)
+print(trie2.search("Hello", "fuzzy", 49))
