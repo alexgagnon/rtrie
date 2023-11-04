@@ -87,7 +87,7 @@ class AttributeNode(Node):
         self.children = children
 
     def __str__(self):
-        return self.attributes
+        return self
 
     def print(self, depth: int):
         if self.children == None:
@@ -500,48 +500,58 @@ class Trie(MutableMapping[str, Attributes]):
         return candidates
 
     def _search_edit_recursive(self, node: AttributeNode, word: str, prefix: str, offset: int, current_distance: int, max_distance: int, candidates: Candidates) -> Candidates:
-        if node == None or node.children == None or len(node.children) == 0:
-          return
+        if node == None or node.children == None:
+            return
 
         for child in node.children:
+            # TODO: need to account for if fragment is smaller than child or vice versa
             new_offset = offset + len(child)
-            fragment = word[offset:new_offset]
+            fragment = word[offset:max(len(child), len(word) - offset)]
             d = distance(fragment, child)
-
-            # we want to be able to tell if the key has 0 difference
             total = d + current_distance
             logging.debug(f"Distance b/w {child} and {fragment}: {d}")
             logging.debug(f"{current_distance} + {d} = {total}")
+            
             if total <= max_distance:
-                # child_node = node.children[child]
-                # new_prefix = prefix + child
-                # logging.debug(f"{word}, {new_prefix}, {distance(word, prefix)}")
-                # if child_node.attributes != None:
-                #     total_distance = distance(word, new_prefix)
-                #     if total_distance <= max_distance:
-                #         candidates.append((total_distance, new_prefix, child_node))
                 child_node = node.children[child]
+                new_prefix = f"{prefix}{child}"
                 if child_node.attributes != None:
-                    candidates.append((total,  prefix, child_node))
-                new_prefix = prefix + child
-
+                    # compute distance to the remainder of the word
+                    total_distance = len(word) - len(new_prefix) + d
+                    logging.debug(f"{word}, {new_prefix}, {total_distance}")
+                    if total_distance <= max_distance:
+                        candidates.append((total_distance, new_prefix, child_node))
                 self._search_edit_recursive(child_node, word, new_prefix, new_offset, total, max_distance, candidates)
 
     def _search_fuzzy_recursive(self, node: AttributeNode, word: str, prefix: str, offset: int, current_distance: int, threshold: float, candidates: Candidates) -> Candidates:
-        # naive approach, test each node until it not longer meets the treshhold
         if node == None or node.children == None or len(node.children) == 0:
             return
         
+        # TODO: investigate if doing a running similarity is faster than skipping early ones
+        
         for child in node.children:
-            new_prefix = prefix + child
-            r = ratio(word, new_prefix)
-            logging.debug(f"Search word: {word}, Prefix: {new_prefix}, Ratio: {r}")
-            if r >= threshold:
-                child_node = node.children[child]
-                if child_node.attributes != None:
-                    candidates.append((r, new_prefix, child_node))
+            new_prefix = f"{prefix}{child}"
 
+            min_sim = abs((len(new_prefix) - len(word)) / len(word))
+
+            # if theres' too many letters difference, there will be no more matches
+            if min_sim > threshold:
+                return
+            
+            # if there's not enough letters, we still need to recurse to check them
+            elif min_sim < 0:
                 self._search_fuzzy_recursive(child_node, word, new_prefix, offset + len(child), None, threshold, candidates)  
+
+            # within the length range where you could have similarities, need to compare.
+            # NOTE: even if a word is too short, 
+            else:
+              r = ratio(word, new_prefix)
+              logging.debug(f"Search word: {word}, Prefix: {new_prefix}, Ratio: {r}")
+              if r >= threshold:
+                  child_node = node.children[child]
+                  if child_node.attributes != None:
+                      candidates.append((r, new_prefix, child_node))
+                  self._search_fuzzy_recursive(child_node, word, new_prefix, offset + len(child), None, threshold, candidates)  
 
     def stats(self, unique: bool = True):
         average_length: int = 0
