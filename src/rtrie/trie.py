@@ -1,14 +1,13 @@
-import logging
-import os
-import pickle
-import gc
-from itertools import chain, tee
+from array import array
 from collections import deque
 from collections.abc import MutableMapping
-from array import array
-from typing import Any, Callable, ItemsView, Iterator, Literal, Optional, TypeAlias, cast
+from itertools import chain, tee
+import logging
+from logging import debug
+import sys
 from rapidfuzz.fuzz import ratio
 from rapidfuzz.distance.DamerauLevenshtein import distance
+from typing import Any, Callable, ItemsView, Iterator, Literal, Optional, TypeAlias, cast
 
 Word: TypeAlias = str | tuple[str, Any]
 Words: TypeAlias = Iterator[Word]
@@ -164,11 +163,16 @@ class Trie(MutableMapping[str, Attributes]):
         return self.words()
     
     def post_add_node(self, **kwargs):
+        """
+        Used to hook into the add method to perform additional operations after a node is added.
+        By default it's a noop.
+        """
         pass
 
     def add_attributes(self, node: AttributeNode, value: Attributes) -> int:
         """
-          The default add method to use when one isn't provided. It uses True/None to indicate whether a node is a word or not
+          The default add method to use when one isn't provided. It uses True/None to indicate whether a node is a word or not.
+          The return value is used to keep a running tally of how many words are in the Trie.
         """
         # if this is a new word, increment the number of words
         # otherwise we are just overwriting attributes which isn't a new word
@@ -179,49 +183,54 @@ class Trie(MutableMapping[str, Attributes]):
         return is_new
 
     def delete_attributes(self, node: AttributeNode) -> int:
-        node.attributes = None
-        return -1
+        deleted = 0
+        if node.attributes != None:
+          node.attributes = None
+          deleted = -1
+        return deleted
 
     def count_attributes(self, node: AttributeNode) -> int:
+        # TODO: confirm this is correct???
         return 1
 
     def add(self, word: str, attributes: Attributes=True):
         """
-          Adds a single word to an already constructed Trie. You should use `add_words` to initialize a Trie for performance reasons
+        Adds a single word. 
+        NOTE: You should use `add_words` to initialize a Trie for performance reasons
         """
         current: AttributeNode = self.root
 
         while True:
-            logging.debug(f'Adding "{word}"')
+            debug(f'Adding "{word}"')
 
             if current.children == None:
-                logging.debug("No children, initializing")
+                debug("No children, initializing")
                 current.children = cast(Children, {})
 
-            logging.debug(str(current.children.keys()))
+            debug(str(current.children.keys()))
 
             if len(current.children.keys()) == 0:
-                logging.debug(
+                debug(
                     f'Empty children, adding "{word}" with `attributes = {attributes}')
                 current.children[word] = AttributeNode()
                 self.num_words += self.add_attributes(current.children[word], attributes)
                 break
 
             elif word in current.children.keys():
-                logging.debug(
+                debug(
                     f'"{word}" already exists, adding attributes {attributes}')
                 self.num_words += self.add_attributes(current.children[word], attributes)
                 break
 
             else:
                 match_found = False
-                logging.debug("No exact match, checking remaining keys...")
+                debug("No exact match, checking remaining keys...")
                 for key in list(current.children.keys()):
-                    index: int = get_longest_prefix_index(key, word)
-                    logging.debug(f"Prefix location: {index}")
+                    index = get_longest_prefix_index(key, word)
+                    debug(f"Prefix location: {index}")
 
                     if index == 0:
-                        logging.debug(
+                        debug(
                             f'"{key}" has no overlapping prefix, continuing...')
                         continue
 
@@ -231,19 +240,19 @@ class Trie(MutableMapping[str, Attributes]):
                         word_suffix = word[index:]
                         key_suffix = key[index:]
 
-                        logging.debug(
+                        debug(
                             f"\nPrefix: {prefix}\nWord remainder: {word_suffix}\nKey remainder: {key_suffix}")
 
                         if len(key_suffix) == 0:
-                            logging.debug("Moving")
+                            debug("Moving")
                             current = current.children[prefix]
                             word = word[index:]
                             break
 
                         else:
-                            logging.debug(f'Creating new node "{key_suffix}"')
+                            debug(f'Creating new node "{key_suffix}"')
                             is_word = len(prefix) == len(word)
-                            logging.debug(
+                            debug(
                                 f'Creating new node "{prefix}", is it a word: {is_word}')
                             current.children[prefix] = AttributeNode(None, Children())
                             self.num_words += self.add_attributes(
@@ -251,20 +260,21 @@ class Trie(MutableMapping[str, Attributes]):
                             
                             # we know this is set to empty dict from above
                             current.children[prefix].children[key_suffix] = current.children[key] # type: ignore
-                            logging.debug(f'Deleting old node "{key}"')
+                            debug(f'Deleting old node "{key}"')
                             del current.children[key]
 
                         if len(word_suffix) > 0:
-                            logging.debug("Iterate to add word remainder")
+                            debug("Iterate to add word remainder")
                             current = current.children[prefix]
                             word = word[index:]
 
                         break
 
                 if not match_found:
-                    logging.debug(
+                    debug(
                         f'No overlapping prefixes in any key, adding "{word}" with `attributes` = {attributes}')
                     if current.children != None:
+                        word = sys.intern(word)   ## TODO: this is the meat and potatoes of mem-optimization
                         current.children[word] = AttributeNode()
                         self.num_words += self.add_attributes(
                             current.children[word], attributes)
@@ -290,45 +300,45 @@ class Trie(MutableMapping[str, Attributes]):
             Returns a list of words that have at least their first character in 
             common, and the first non-matching one so we can add it back into the generator
         """
-        logging.debug(">> get_matching_prefixes")
-        logging.debug(f"Offset: {offset}")
-        if logging.getLogger().level == logging.DEBUG:
+        debug(">> get_matching_prefixes")
+        debug(f"Offset: {offset}")
+        if logging.getLogger().level == debug:
             words_copy = tee(words)
-            logging.debug(f"Words: {list(words_copy)}")
+            debug(f"Words: {list(words_copy)}")
         matches: list[Word] = []
         first = next(words, None)
-        logging.debug(f"First: {first}")
+        debug(f"First: {first}")
         if first == None:
             return (matches, None)
 
         matches.append(first)
         first_label = _get_values(first)[0]
-        logging.debug(f"First label: {first_label}")
+        debug(f"First label: {first_label}")
         first_label = first_label[offset:]
 
         # TODO: compare with takewhile
         current = next(words, None)
         while current != None:
             current_label = _get_values(current)[0]
-            logging.debug(f"Current label: {current_label}")
+            debug(f"Current label: {current_label}")
             current_label = current_label[offset:]
-            logging.debug(first_label)
-            logging.debug(current_label)
+            debug(first_label)
+            debug(current_label)
             try:
                 if first_label[0] == current_label[0]:
-                    logging.debug("Matching prefix")
+                    debug("Matching prefix")
                     matches.append(current)
                     current = next(words, None)
                 else:
-                    logging.debug("No matching prefix")
+                    debug("No matching prefix")
                     break
             except IndexError:
                 # TODO: fix this, it seems to be when a following word is shorter than the first?
                 logging.warn(first_label, current)
                 current = next(words, None)
 
-        logging.debug(f"Matches: {matches}, last: {current}")
-        logging.debug("<< get_matching_prefixes")
+        debug(f"Matches: {matches}, last: {current}")
+        debug("<< get_matching_prefixes")
         # return it as a list so we can use len() on it
         return (matches, current)
 
@@ -348,7 +358,7 @@ class Trie(MutableMapping[str, Attributes]):
 
             # base case
             if len(matches) == 0:
-                logging.debug("No matches - base case")
+                debug("No matches - base case")
                 return
 
             words = cast(Words, chain([last], words))
@@ -362,8 +372,8 @@ class Trie(MutableMapping[str, Attributes]):
 
             # matching case, add to Trie
             if len(matches) == 1:
-                logging.debug("Single match - normal case")
-                logging.debug(
+                debug("Single match - normal case")
+                debug(
                     f"Adding word {first_label} with attributes {first_attributes}")
                 current.children[first_label] = AttributeNode()
                 self.num_words += self.add_attributes(
@@ -375,18 +385,18 @@ class Trie(MutableMapping[str, Attributes]):
 
             # recursive case
             else:
-                logging.debug("Multiple matches")
+                debug("Multiple matches")
 
                 # test if they are all the same word
                 # since it's a sorted list, we can do this by comparing the first
                 # and last words
                 last_label = _get_values(matches[-1])[0]
                 last_label = last_label[offset:]
-                logging.debug(f"{first_label} vs {last_label}")
+                debug(f"{first_label} vs {last_label}")
                 prefix_length = get_longest_prefix_index(
                     first_label, last_label)
                 prefix = first_label[:prefix_length]
-                logging.debug(f"Prefix: {prefix} ({prefix_length})")
+                debug(f"Prefix: {prefix} ({prefix_length})")
 
                 # create a node for the longest matching prefix...
                 # the next step decides if it's a word or not
@@ -396,7 +406,7 @@ class Trie(MutableMapping[str, Attributes]):
 
                 # if the length of the longest prefix is the same as the first word, it's a word
                 if (prefix_length == len(first_label)):
-                    logging.debug("Prefix is the first word")
+                    debug("Prefix is the first word")
 
                     # there could be multiple instances of the word, so keep adding all matching ones
                     word = next(matches, None)
@@ -404,7 +414,7 @@ class Trie(MutableMapping[str, Attributes]):
                         label, attributes = _get_values(word)
                         if label[offset:] != prefix:
                             break
-                        logging.debug(
+                        debug(
                             f"Adding word {label} with attributes {attributes}")
                         self.num_words += self.add_attributes(
                             current.children[prefix], attributes)
@@ -416,9 +426,9 @@ class Trie(MutableMapping[str, Attributes]):
 
                 # otherwise, it's just a node
                 else:
-                    logging.debug("Prefix is not a word")
+                    debug("Prefix is not a word")
 
-                logging.debug("Recursing...")
+                debug("Recursing...")
                 self._add_words_recursive(
                     matches, current.children[prefix], offset + prefix_length, depth + 1)
                 self.post_add_node(node = current, label = first_label_copy[:offset + prefix_length], prefix = prefix, depth = depth, max_length = 0)
@@ -427,7 +437,7 @@ class Trie(MutableMapping[str, Attributes]):
                 break
 
 
-    def words(self, sort: bool =False) -> Iterator[str]:
+    def words(self, sort=False) -> Iterator[str]:
         """
         Returns all nodes that are words
         """
@@ -435,7 +445,10 @@ class Trie(MutableMapping[str, Attributes]):
             if (node.attributes != None):
                 yield prefix
 
-    def nodes(self, sort: bool = False) -> Iterator[Record]:
+    def nodes(self, sort=False) -> Iterator[Record]:
+        """
+        BF traversal of the Trie, optionally in sorted order
+        """
         prefix = ""
         stack: deque[Entry] = deque()
         if self.root.children != None:
@@ -458,6 +471,9 @@ class Trie(MutableMapping[str, Attributes]):
                     stack.append((prefix + key, value))
 
     def _get_node(self, word: str) -> tuple[Record, AttributeNode | None] | None:
+        """
+        Returns the node that matches a given word, or None if it doesn't exist
+        """
         return self._get_node_recursive(self.root, None, word, "")
 
     def _get_node_recursive(self, node: AttributeNode, previous_node: Optional[AttributeNode], word: str, prefix: str) -> Optional[tuple[Entry, Optional[AttributeNode]]]:
@@ -469,13 +485,13 @@ class Trie(MutableMapping[str, Attributes]):
             for i in range(0, len(word)):
                 w = word[:i]
                 if w in node.children:
-                    logging.debug(f"Prefix: {prefix}, Word: {word}")
+                    debug(f"Prefix: {prefix}, Word: {word}")
                     return self._get_node_recursive(node.children[w], node, word[i:], prefix + w)
 
             return None
         return None
 
-    # TODO: this returns a generator which technically isn't correct, but works for most cases
+    # TODO: this returns a generator which technically isn't correct for a MultipleMap, but works for most cases
     def items(self) -> ItemsView[str, Attributes]:
         """
             Method to make it interoperable with dict, where keys are the words, and values are the attributes
@@ -509,8 +525,8 @@ class Trie(MutableMapping[str, Attributes]):
             fragment = word[offset:max(len(child), len(word) - offset)]
             d = distance(fragment, child)
             total = d + current_distance
-            logging.debug(f"Distance b/w {child} and {fragment}: {d}")
-            logging.debug(f"{current_distance} + {d} = {total}")
+            debug(f"Distance b/w {child} and {fragment}: {d}")
+            debug(f"{current_distance} + {d} = {total}")
             
             if total <= max_distance:
                 child_node = node.children[child]
@@ -518,7 +534,7 @@ class Trie(MutableMapping[str, Attributes]):
                 if child_node.attributes != None:
                     # compute distance to the remainder of the word
                     total_distance = len(word) - len(new_prefix) + d
-                    logging.debug(f"{word}, {new_prefix}, {total_distance}")
+                    debug(f"{word}, {new_prefix}, {total_distance}")
                     if total_distance <= max_distance:
                         candidates.append((total_distance, new_prefix, child_node))
                 self._search_edit_recursive(child_node, word, new_prefix, new_offset, total, max_distance, candidates)
@@ -546,7 +562,7 @@ class Trie(MutableMapping[str, Attributes]):
             # NOTE: even if a word is too short, 
             else:
               r = ratio(word, new_prefix)
-              logging.debug(f"Search word: {word}, Prefix: {new_prefix}, Ratio: {r}")
+              debug(f"Search word: {word}, Prefix: {new_prefix}, Ratio: {r}")
               if r >= threshold:
                   child_node = node.children[child]
                   if child_node.attributes != None:

@@ -4,15 +4,17 @@ A generalized radix trie implementation in pure python.
 
 ## TODO
 
-- [ ] investigate microdict
+- [ ] delete method
+- [ ] finalize search
+- [ ] is a separate MaxLengthNode needed?
+- [ ] sys.intern dict keys
 
 ## Usage
 
 ### Building
 
-#### Saving subtries to disk
-
-When dealing with data that when stored would exceed your available memory, you can define the max depth you want to maintain in memory, and any data that exceeds that depth will be saved to disk. This is done by passing a `save_path` to the `build` method. It will automatically reload the trie from disk when needed.
+The fastest way to build a Trie is by having the words in sorted order and then using the `add_words` method.
+Alternatively you can add a collection of words out of order using the `add` method
 
 ### Searching
 

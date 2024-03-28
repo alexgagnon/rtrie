@@ -7,9 +7,6 @@ readme = "README.md"
 license = "MIT"
 packages = [{include = "rtrie", from = "src"}]
 
-# [tool.poetry.scripts]
-# dev = "rtrie:main"
-
 [tool.poetry.dependencies]
 python = "^3.11"
 rapidfuzz = "^3.1.1"
@@ -23,7 +20,7 @@ deepdiff = "^6.3.0"
 bumpver = "^2023.1124"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=1.2.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.bumpver]
