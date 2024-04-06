@@ -5,6 +5,8 @@ from rtrie.array_trie import ArrayTrie
 from rtrie.string_trie import StringTrie
 from rtrie.naive_trie import NaiveTrie
 from sortedcontainers import SortedDict, SortedSet
+import sys
+from pympler import asizeof
 
 level = logging.DEBUG if os.environ.get("DEBUG") == "True" else logging.INFO
 logging.basicConfig(level = level)
@@ -13,26 +15,47 @@ with open('data/sample.tsv') as f:
     entries = [tuple(word.strip().split("\t")) for word in f]
     words = [w[0] for w in entries]
     words_gen = (w for w in words)
-    # words = ['mama', 'manta']
-    # # words_list = [(word, i) for i, word in enumerate(words)]
-    # words_gen = (w for w in words)
+    entries_gen = (entry for entry in entries)
     hash_set = set(words)
+    hash_map = {word: id for word, id in entries}
     sorted_set = SortedSet(words)
+    sorted_map = SortedDict(hash_map)
     trie = Trie(words=words_gen)
+    string_trie = StringTrie(words=entries_gen)
     naive_trie = NaiveTrie(words=words)
 
-    print(hash_set)
-    print(sorted_set)
-    print(trie)
-    print(naive_trie)
-
-    import sys
-    from pympler import asizeof
+    # print(hash_set)
+    # print(hash_map)
+    # print(sorted_set)
+    # print(sorted_map)
+    # print(trie)
+    # print(string_trie)
+    # print(naive_trie)
 
     print(f'HashSet size: {asizeof.asizeof(hash_set)}')
+    print(f'HashMap size: {asizeof.asizeof(hash_map)}')
     print(f'SortedSet size: {asizeof.asizeof(sorted_set)}')
+    print(f'SortedMap size: {asizeof.asizeof(sorted_map)}')
     print(f'Trie size: {asizeof.asizeof(trie)}')
+    print(f'String trie size: {asizeof.asizeof(string_trie)}')
     print(f'Naive trie size: {asizeof.asizeof(naive_trie)}')
+
+    # term = 'Belgium'
+    # print(term in hash_set)
+    # print(term in hash_map)
+    # print(term in sorted_set)
+    # print(term in sorted_map)
+    # print(term in trie)
+    # print(term in naive_trie)
+
+    # print(len(string_trie))
+    # string_trie.add('doggies', 24)
+    # print(string_trie)
+    # print('doggies' in string_trie)
+    # print(string_trie['doggies'])
+    # print(string_trie.get('doggies'))
+    # print(len(string_trie))
+
     # _123 = sys.intern('123')
     # print(asizeof.asizeof(_123))
     # print(asizeof.asizeof(123))

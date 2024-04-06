@@ -11,12 +11,6 @@ class NaiveTrie:
     def __contains__(self, word):
         return self.search(word)
     
-    def __str__(self):
-        return self.root.print(0)
-    
-    def __delitem__(self, word: str):
-        return self.delete(word)
-
     def __getitem__(self, word: str):
         result = self._get_node(word)
         if result != None and result[0][1].attributes != None:
@@ -31,12 +25,12 @@ class NaiveTrie:
     def __str__(self):
         return self.root.print(0)
 
-    def __len__(self):
-        return self.num_words
-
     def __contains__(self, word: object) -> bool:
-        result = self._get_node(cast(str, word))
-        return result != None and result[0][1].attributes != None
+        for letter in word:
+            if letter not in self.root.children:
+                return False
+            self.root = self.root.children[letter]
+        return True
 
     def __iter__(self):
         return self.words()

@@ -8,10 +8,10 @@ class StringTrie(Trie):
 
     def add_attributes(self, node: Node, value: Any) -> int:
         if value == None:
-            node.attributes = None
+            node.attributes = None # TODO: confirm if this is the correct behavior
             return 0
         if node.attributes == None:
-            node.attributes = str(value)
+            node.attributes = value
             return 1
         else:
             # check if it already exists or not
@@ -19,7 +19,7 @@ class StringTrie(Trie):
             if value in values:
                 return 0
             node.attributes = f"{node.attributes}{self.separator}{str(value)}"
-            return 1      
+            return 1
 
     def count_attributes(self, value):
         return len(value.split(self.separator)) if value != None else 0
