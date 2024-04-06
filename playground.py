@@ -1,6 +1,7 @@
 from rtrie import Trie
 import logging
 import os
+from rtrie.node import MaxLengthStringAttributeNode
 from rtrie.array_trie import ArrayTrie
 from rtrie.string_trie import StringTrie
 from rtrie.naive_trie import NaiveTrie
@@ -21,7 +22,7 @@ with open('data/sample.tsv') as f:
     sorted_set = SortedSet(words)
     sorted_map = SortedDict(hash_map)
     trie = Trie(words=words_gen)
-    string_trie = StringTrie(words=entries_gen)
+    string_trie = Trie(words=entries_gen, node_type=MaxLengthStringAttributeNode)
     naive_trie = NaiveTrie(words=words)
 
     # print(hash_set)
@@ -48,13 +49,9 @@ with open('data/sample.tsv') as f:
     # print(term in trie)
     # print(term in naive_trie)
 
-    # print(len(string_trie))
-    # string_trie.add('doggies', 24)
-    # print(string_trie)
-    # print('doggies' in string_trie)
-    # print(string_trie['doggies'])
-    # print(string_trie.get('doggies'))
-    # print(len(string_trie))
+    print(len(string_trie))
+    string_trie.add('dog', 24)
+    print(string_trie)
 
     # _123 = sys.intern('123')
     # print(asizeof.asizeof(_123))

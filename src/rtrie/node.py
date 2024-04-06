@@ -18,6 +18,7 @@ class Node:
     """
       Base Abstract Node type
     """
+    __slots__ = ()
 
 class AttributeNode(Node):
     """
@@ -85,6 +86,7 @@ class StringAttributeNode(AttributeNode):
     """
       Node that supports storing attributes as a string split by a separator
     """
+    __slots__ = ()
 
     separator = '|'
 
@@ -106,7 +108,8 @@ class StringAttributeNode(AttributeNode):
     def count_attributes(self, value):
         return len(value.split(self.separator)) if value != None else 0
 
-class MaxLengthAttributeNode(MaxLengthNode, AttributeNode):
+class MaxLengthStringAttributeNode(MaxLengthNode, StringAttributeNode):
     __slots__ = ('max_length')
+
     def __init__(self, attributes: Attributes = None, children: Optional[Children] = None, max_length: int = 0, *args, **kwargs):
         super().__init__(attributes=attributes, children=children, max_length=max_length, *args, **kwargs)

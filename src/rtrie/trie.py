@@ -10,7 +10,7 @@ from rapidfuzz.fuzz import ratio
 from rapidfuzz.distance.DamerauLevenshtein import distance
 from typing import ItemsView, Iterator, Literal, Optional, cast
 from .types import Attributes, Record, Word, Words
-from .node import AttributeNode, Candidates, Children, Entry, Node
+from .node import AttributeNode, Candidates, Children, Entry, Node, StringAttributeNode
 
 log_level = os.environ.get('LOG_LEVEL') if os.environ.get('LOG_LEVEL') != None else 'ERROR'
 logging.basicConfig(level=logging.getLevelName(log_level), format='%(message)s')
@@ -69,10 +69,10 @@ class Trie(MutableMapping[str, Attributes]):
     __slots__ = ('root', 'num_words', 'node_factory')
 
     def __init__(self, 
-                 root: AttributeNode | None=None, 
-                 words: Optional[Words] = None,
-                 node_type: Node = AttributeNode,
-                ):
+      root: AttributeNode | None=None, 
+      words: Optional[Words] = None,
+      node_type: AttributeNode = StringAttributeNode
+    ):
         """
             Initialize a Trie.
 
@@ -85,9 +85,9 @@ class Trie(MutableMapping[str, Attributes]):
             the value `True`, indicating it is a word, and adding the same word again will not affect the trie.
         """
 
-        self.root = root if root != None else AttributeNode()
-        self.num_words: int = 0
         self.node_factory = node_type
+        self.num_words: int = 0
+        self.root = root if root != None else self.node_factory()
 
         if words:
             self.add_words(words)
@@ -145,14 +145,14 @@ class Trie(MutableMapping[str, Attributes]):
             if len(current.children.keys()) == 0:
                 debug(
                     f'Empty children, adding "{word}" with `attributes = {attributes}')
-                current.children[word] = AttributeNode()
-                self.num_words += self.add_attributes(current.children[word], attributes)
+                current.children[word] = self.node_factory()
+                self.num_words += current.children[word].add_attributes(attributes)
                 break
 
             elif word in current.children.keys():
                 debug(
                     f'"{word}" already exists, adding attributes {attributes}')
-                self.num_words += self.add_attributes(current.children[word], attributes)
+                self.num_words += current.children[word].add_attributes(attributes)
                 break
 
             else:
@@ -187,9 +187,8 @@ class Trie(MutableMapping[str, Attributes]):
                             is_word = len(prefix) == len(word)
                             debug(
                                 f'Creating new node "{prefix}", is it a word: {is_word}')
-                            current.children[prefix] = AttributeNode(None, Children())
-                            self.num_words += self.add_attributes(
-                                current.children[prefix], attributes if is_word else None)
+                            current.children[prefix] = self.node_factory(None, Children())
+                            self.num_words += current.children[prefix].add_attributes(attributes if is_word else None)
                             
                             # we know this is set to empty dict from above
                             current.children[prefix].children[key_suffix] = current.children[key] # type: ignore
@@ -208,9 +207,8 @@ class Trie(MutableMapping[str, Attributes]):
                         f'No overlapping prefixes in any key, adding "{word}" with `attributes` = {attributes}')
                     if current.children != None:
                         word = sys.intern(word)   ## TODO: this is the meat and potatoes of mem-optimization
-                        current.children[word] = AttributeNode()
-                        self.num_words += self.add_attributes(
-                            current.children[word], attributes)
+                        current.children[word] = self.node_factory()
+                        self.num_words += current.children[word].add_attributes(attributes)
                     break
 
     def delete(self, word: str):
@@ -305,9 +303,8 @@ class Trie(MutableMapping[str, Attributes]):
                 debug("Single match - normal case")
                 debug(
                     f"Adding word {first_label} with attributes {first_attributes}")
-                current.children[first_label] = AttributeNode()
-                self.num_words += self.add_attributes(
-                    current.children[first_label], first_attributes)
+                current.children[first_label] = self.node_factory()
+                self.num_words += current.children[first_label].add_attributes(first_attributes)
                 self.post_add_node(node = current, label = first_label_copy, prefix = '', depth = depth, max_length = 0)
                 if last == None:
                     return
@@ -331,7 +328,7 @@ class Trie(MutableMapping[str, Attributes]):
 
                 # create a node for the longest matching prefix...
                 # the next step decides if it's a word or not
-                current.children[prefix] = AttributeNode()
+                current.children[prefix] = self.node_factory()
 
                 matches = iter(matches)
 
@@ -348,8 +345,7 @@ class Trie(MutableMapping[str, Attributes]):
                             break
                         debug(
                             f"Adding word {label} with attributes {attributes}")
-                        self.num_words += self.add_attributes(
-                            current.children[prefix], attributes)
+                        self.num_words += current.children[prefix].add_attributes(attributes)
                         word = next(matches, None)
 
                     # if it's the end of the iter we're done

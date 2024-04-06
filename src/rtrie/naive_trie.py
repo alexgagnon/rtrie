@@ -31,16 +31,6 @@ class NaiveTrie:
                 return False
             self.root = self.root.children[letter]
         return True
-
-    def __iter__(self):
-        return self.words()
-    
-    def post_add_node(self, **kwargs):
-        """
-        Used to hook into the add method to perform additional operations after a node is added.
-        By default it's a no-op.
-        """
-        pass
     
     def add(self, word):
         current = self.root
