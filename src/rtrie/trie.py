@@ -8,16 +8,9 @@ import os
 import sys
 from rapidfuzz.fuzz import ratio
 from rapidfuzz.distance.DamerauLevenshtein import distance
-from typing import Any, Callable, ItemsView, Iterator, Literal, Optional, TypeAlias, cast
-
-Word: TypeAlias = str | tuple[str, Any]
-Words: TypeAlias = Iterator[Word]
-Attributes: TypeAlias = Any
-Entry: TypeAlias = tuple[str, 'AttributeNode']
-Record: TypeAlias = tuple[str, Attributes]
-Children: TypeAlias = dict[str, 'AttributeNode']
-Candidates: TypeAlias = list[tuple[int, str, 'AttributeNode']]
-AdditionalAttributes: TypeAlias = Optional[dict[str, Any]]
+from typing import ItemsView, Iterator, Literal, Optional, cast
+from .types import Attributes, Record, Word, Words
+from .node import AttributeNode, Candidates, Children, Entry, Node
 
 log_level = os.environ.get('LOG_LEVEL') if os.environ.get('LOG_LEVEL') != None else 'ERROR'
 logging.basicConfig(level=logging.getLevelName(log_level), format='%(message)s')
@@ -72,52 +65,13 @@ def _get_values(element: Word) -> Record:
         error(element[0])
         return ("null", -1)
 
-class Node:
-    """
-      Base Node type
-    """
-
-class AttributeNode(Node):
-    # avoid storing class attributes in '__dict__' to save memory
-    __slots__ = ('attributes', 'children', 'max_length')
-
-    attributes: Attributes
-    children: Optional[Children]
-    max_length: int
-    # __extras__: AdditionalAttributes
-
-    def __init__(self, attributes: Attributes = None, children: Optional[Children] = None, *args, **kwargs):
-        self.attributes = attributes
-        self.children = children
-
-    def __str__(self):
-        return self
-
-    def print(self, depth: int):
-        if self.children == None:
-            return ""
-        offset = "\t" * depth
-        string = ""
-        for key, child in self.children.items():
-            string += "\n" + offset + "\t" + \
-                f"{key}({child.attributes}): {child.print(depth+1)}"
-        return string
-
-class StoredNode(Node):
-    __slots__ = ('filename')
-
-    filename: str
-
-    def __init__(self, attributes: Attributes = None, children: Optional[Children] = None, filename: str = None, *args, **kwargs):
-        super().__init__(attributes, children, *args, **kwargs)
-        self.filename = filename
-
 class Trie(MutableMapping[str, Attributes]):
-    __slots__ = ('root', 'num_words')
+    __slots__ = ('root', 'num_words', 'node_factory')
 
     def __init__(self, 
                  root: AttributeNode | None=None, 
-                 words: Optional[Words] = None
+                 words: Optional[Words] = None,
+                 node_type: Node = AttributeNode,
                 ):
         """
             Initialize a Trie.
@@ -133,10 +87,8 @@ class Trie(MutableMapping[str, Attributes]):
 
         self.root = root if root != None else AttributeNode()
         self.num_words: int = 0
-        # self.depth_to_store = depth_to_store
-        # self.subtrie_path = subtrie_path
-        # if self.depth_to_store != None:
-        #     os.mkdir(self.subtrie_path)
+        self.node_factory = node_type
+
         if words:
             self.add_words(words)
 
@@ -173,32 +125,6 @@ class Trie(MutableMapping[str, Attributes]):
         By default it's a no-op.
         """
         pass
-
-    def add_attributes(self, node: AttributeNode, value: Attributes) -> int:
-        """
-          The default add method to use when one isn't provided. It adds to 'attributes' if defined, 
-          to indicate whether a node is a word or not. The return value is used to keep a running 
-          tally of how many words are in the Trie.
-
-          The default for Trie is to set it to True, and num_words is only incremented if it's a new word.
-        """
-        # if this is a new word, increment the number of words
-        # otherwise we are just overwriting attributes which isn't a new word
-        is_new = 1
-        if node.attributes != None:
-            is_new = 0
-        node.attributes = value
-        return is_new
-
-    def delete_attributes(self, node: AttributeNode) -> int:
-        deleted = 0
-        if node.attributes != None:
-          node.attributes = None
-          deleted = -1
-        return deleted
-
-    def count_attributes(self, node: AttributeNode) -> int:
-        return 1 if node.attributes != None else 0
 
     def add(self, word: str, attributes: Attributes=True):
         """
