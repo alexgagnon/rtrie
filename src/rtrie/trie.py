@@ -3,7 +3,8 @@ from collections import deque
 from collections.abc import MutableMapping
 from itertools import chain, tee
 import logging
-from logging import debug
+from logging import debug, error
+import os
 import sys
 from rapidfuzz.fuzz import ratio
 from rapidfuzz.distance.DamerauLevenshtein import distance
@@ -17,6 +18,9 @@ Record: TypeAlias = tuple[str, Attributes]
 Children: TypeAlias = dict[str, 'AttributeNode']
 Candidates: TypeAlias = list[tuple[int, str, 'AttributeNode']]
 AdditionalAttributes: TypeAlias = Optional[dict[str, Any]]
+
+log_level = logging.DEBUG if os.environ.get("DEBUG") == "True" else logging.ERROR
+logging.basicConfig(level=log_level, format='%(levelname)s: %(message)s' if log_level != 'ERROR' else '%(message)s')
 
 def get_filename(string: str) -> str:
     return "".join([x if x.isalnum() else "_" for x in string])
@@ -65,7 +69,7 @@ def _get_values(element: Word) -> Record:
     try:
         return (element[0], element[1]) if isinstance(element, tuple) else (element, True)
     except IndexError:
-        print(element[0])
+        error(element[0])
         return ("null", -1)
 
 class Node:
@@ -78,8 +82,8 @@ class AttributeNode(Node):
     __slots__ = ('attributes', 'children')
 
     attributes: Attributes
-    children: Children
-    __extras__: AdditionalAttributes
+    children: Optional[Children]
+    # __extras__: AdditionalAttributes
 
     def __init__(self, attributes: Attributes = None, children: Optional[Children] = None, *args, **kwargs):
         self.attributes = attributes
@@ -93,9 +97,7 @@ class AttributeNode(Node):
             return ""
         offset = "\t" * depth
         string = ""
-        for item in self.children.items():
-            key: str = item[0]
-            child: AttributeNode = item[1]
+        for key, child in self.children.items():
             string += "\n" + offset + "\t" + \
                 f"{key}({child.attributes}): {child.print(depth+1)}"
         return string
@@ -117,7 +119,7 @@ class Trie(MutableMapping[str, Attributes]):
         """
             Initialize a Trie.
 
-            NOTE: `words` must be either a list of strings or a list of tuples of the form (word: str, attributes: Any). If `words` is a list of
+            NOTE: `words` must be either a iterable of strings or a iterable of tuples of the form (word: str, attributes: Any). If `words` is a list of
             strings, the `attributes` property will be set to `True` for each word.
 
             You can pass in a custom add function that is used to control how attributes are defined. This can be useful if you need
@@ -165,7 +167,7 @@ class Trie(MutableMapping[str, Attributes]):
     def post_add_node(self, **kwargs):
         """
         Used to hook into the add method to perform additional operations after a node is added.
-        By default it's a noop.
+        By default it's a no-op.
         """
         pass
 
@@ -274,7 +276,7 @@ class Trie(MutableMapping[str, Attributes]):
                     debug(
                         f'No overlapping prefixes in any key, adding "{word}" with `attributes` = {attributes}')
                     if current.children != None:
-                        word = sys.intern(word)   ## TODO: this is the meat and potatoes of mem-optimization
+                        # word = sys.intern(word)   ## TODO: this is the meat and potatoes of mem-optimization
                         current.children[word] = AttributeNode()
                         self.num_words += self.add_attributes(
                             current.children[word], attributes)
@@ -286,10 +288,6 @@ class Trie(MutableMapping[str, Attributes]):
     def add_words(self, words: Words):
         """
             This function is to speed up initialzing a Trie by using a sorted collection of words.
-            It also allows for storing subtries to a file based on a desired depth while building, allowing you
-            to build very large tries without consuming too much memory. This is a trade-off for speed for lookups and number of files
-            (greater depth, more files, but faster loading of subtries on disk), however can create more files, so only use
-            if necessary.
 
             NOTE: the words passed in MUST be in lexigraphically sorted order, or else the output will not be correct
         """
@@ -369,6 +367,7 @@ class Trie(MutableMapping[str, Attributes]):
             first_label, first_attributes = _get_values(matches[0])
             first_label_copy = first_label
             first_label = first_label[offset:]
+            # first_label = sys.intern(first_label)
 
             # matching case, add to Trie
             if len(matches) == 1:
@@ -396,6 +395,7 @@ class Trie(MutableMapping[str, Attributes]):
                 prefix_length = get_longest_prefix_index(
                     first_label, last_label)
                 prefix = first_label[:prefix_length]
+                # prefix = sys.intern(prefix)
                 debug(f"Prefix: {prefix} ({prefix_length})")
 
                 # create a node for the longest matching prefix...
@@ -408,7 +408,8 @@ class Trie(MutableMapping[str, Attributes]):
                 if (prefix_length == len(first_label)):
                     debug("Prefix is the first word")
 
-                    # there could be multiple instances of the word, so keep adding all matching ones
+                    # there could be multiple instances of the word with different attributes, 
+                    # so keep adding them all
                     word = next(matches, None)
                     while word != None:
                         label, attributes = _get_values(word)
@@ -437,202 +438,202 @@ class Trie(MutableMapping[str, Attributes]):
                 break
 
 
-    def words(self, sort=False) -> Iterator[str]:
-        """
-        Returns all nodes that are words
-        """
-        for prefix, node in self.nodes(sort):
-            if (node.attributes != None):
-                yield prefix
+    # def words(self, sort=False) -> Iterator[str]:
+    #     """
+    #     Returns all nodes that are words
+    #     """
+    #     for prefix, node in self.nodes(sort):
+    #         if (node.attributes != None):
+    #             yield prefix
 
-    def nodes(self, sort=False) -> Iterator[Record]:
-        """
-        BF traversal of the Trie, optionally in sorted order
-        """
-        prefix = ""
-        stack: deque[Entry] = deque()
-        if self.root.children != None:
-            items = self.root.children.items()
-            if sort:
-                items = reversed(sorted(items))
-            for item in items:
-                stack.append(item)
+    # def nodes(self, sort=False) -> Iterator[Record]:
+    #     """
+    #     BF traversal of the Trie, optionally in sorted order
+    #     """
+    #     prefix = ""
+    #     stack: deque[Entry] = deque()
+    #     if self.root.children != None:
+    #         items = self.root.children.items()
+    #         if sort:
+    #             items = reversed(sorted(items))
+    #         for item in items:
+    #             stack.append(item)
 
-        while stack:
-            prefix, node = stack.pop()
+    #     while stack:
+    #         prefix, node = stack.pop()
 
-            yield (prefix, node)
+    #         yield (prefix, node)
 
-            if node.children != None:
-                items = node.children.items()
-                if sort:
-                    items = reversed(sorted(items))
-                for key, value in items:
-                    stack.append((prefix + key, value))
+    #         if node.children != None:
+    #             items = node.children.items()
+    #             if sort:
+    #                 items = reversed(sorted(items))
+    #             for key, value in items:
+    #                 stack.append((prefix + key, value))
 
-    def _get_node(self, word: str) -> tuple[Record, AttributeNode | None] | None:
-        """
-        Returns the node that matches a given word, or None if it doesn't exist
-        """
-        return self._get_node_recursive(self.root, None, word, "")
+    # def _get_node(self, word: str) -> tuple[Record, AttributeNode | None] | None:
+    #     """
+    #     Returns the node that matches a given word, or None if it doesn't exist
+    #     """
+    #     return self._get_node_recursive(self.root, None, word, "")
 
-    def _get_node_recursive(self, node: AttributeNode, previous_node: Optional[AttributeNode], word: str, prefix: str) -> Optional[tuple[Entry, Optional[AttributeNode]]]:
-        if node.children != None:
-            if (word in node.children):
-                return ((prefix + word, node.children[word]), previous_node)
+    # def _get_node_recursive(self, node: AttributeNode, previous_node: Optional[AttributeNode], word: str, prefix: str) -> Optional[tuple[Entry, Optional[AttributeNode]]]:
+    #     if node.children != None:
+    #         if (word in node.children):
+    #             return ((prefix + word, node.children[word]), previous_node)
 
-            # try seeing if there's a node with a matching prefix starting from shortest to longest
-            for i in range(0, len(word)):
-                w = word[:i]
-                if w in node.children:
-                    debug(f"Prefix: {prefix}, Word: {word}")
-                    return self._get_node_recursive(node.children[w], node, word[i:], prefix + w)
+    #         # try seeing if there's a node with a matching prefix starting from shortest to longest
+    #         for i in range(0, len(word)):
+    #             w = word[:i]
+    #             if w in node.children:
+    #                 debug(f"Prefix: {prefix}, Word: {word}")
+    #                 return self._get_node_recursive(node.children[w], node, word[i:], prefix + w)
 
-            return None
-        return None
+    #         return None
+    #     return None
 
-    # TODO: this returns a generator which technically isn't correct for a MultipleMap, but works for most cases
-    def items(self) -> ItemsView[str, Attributes]:
-        """
-            Method to make it interoperable with dict, where keys are the words, and values are the attributes
-        """
+    # # TODO: this returns a generator which technically isn't correct for a MultipleMap, but works for most cases
+    # def items(self) -> ItemsView[str, Attributes]:
+    #     """
+    #         Method to make it interoperable with dict, where keys are the words, and values are the attributes
+    #     """
         
-        for prefix, node in self.nodes():
-            if (node.attributes != None):
-                yield (prefix, node.attributes)
+    #     for prefix, node in self.nodes():
+    #         if (node.attributes != None):
+    #             yield (prefix, node.attributes)
 
-    def search(self, word, type: Literal['fuzzy', 'edit'] = 'edit', threshold: int | float = 0) -> Candidates:
+    # def search(self, word, type: Literal['fuzzy', 'edit'] = 'edit', threshold: int | float = 0) -> Candidates:
 
-        # Pruning phase
-        candidates = []
-        offset = 0
-        distance = 0
+    #     # Pruning phase
+    #     candidates = []
+    #     offset = 0
+    #     distance = 0
 
-        if type == 'edit':
-          self._search_edit_recursive(self.root, word, "", offset, distance, int(threshold), candidates)
-        else:
-          self._search_fuzzy_recursive(self.root, word, "", offset, distance, threshold, candidates)
+    #     if type == 'edit':
+    #       self._search_edit_recursive(self.root, word, "", offset, distance, int(threshold), candidates)
+    #     else:
+    #       self._search_fuzzy_recursive(self.root, word, "", offset, distance, threshold, candidates)
 
-        return candidates
+    #     return candidates
 
-    def _search_edit_recursive(self, node: AttributeNode, word: str, prefix: str, offset: int, current_distance: int, max_distance: int, candidates: Candidates) -> Candidates:
-        if node == None or node.children == None:
-            return
+    # def _search_edit_recursive(self, node: AttributeNode, word: str, prefix: str, offset: int, current_distance: int, max_distance: int, candidates: Candidates) -> Candidates:
+    #     if node == None or node.children == None:
+    #         return
 
-        for child in node.children:
-            # TODO: need to account for if fragment is smaller than child or vice versa
-            new_offset = offset + len(child)
-            fragment = word[offset:max(len(child), len(word) - offset)]
-            d = distance(fragment, child)
-            total = d + current_distance
-            debug(f"Distance b/w {child} and {fragment}: {d}")
-            debug(f"{current_distance} + {d} = {total}")
+    #     for child in node.children:
+    #         # TODO: need to account for if fragment is smaller than child or vice versa
+    #         new_offset = offset + len(child)
+    #         fragment = word[offset:max(len(child), len(word) - offset)]
+    #         d = distance(fragment, child)
+    #         total = d + current_distance
+    #         debug(f"Distance b/w {child} and {fragment}: {d}")
+    #         debug(f"{current_distance} + {d} = {total}")
             
-            if total <= max_distance:
-                child_node = node.children[child]
-                new_prefix = f"{prefix}{child}"
-                if child_node.attributes != None:
-                    # compute distance to the remainder of the word
-                    total_distance = len(word) - len(new_prefix) + d
-                    debug(f"{word}, {new_prefix}, {total_distance}")
-                    if total_distance <= max_distance:
-                        candidates.append((total_distance, new_prefix, child_node))
-                self._search_edit_recursive(child_node, word, new_prefix, new_offset, total, max_distance, candidates)
+    #         if total <= max_distance:
+    #             child_node = node.children[child]
+    #             new_prefix = f"{prefix}{child}"
+    #             if child_node.attributes != None:
+    #                 # compute distance to the remainder of the word
+    #                 total_distance = len(word) - len(new_prefix) + d
+    #                 debug(f"{word}, {new_prefix}, {total_distance}")
+    #                 if total_distance <= max_distance:
+    #                     candidates.append((total_distance, new_prefix, child_node))
+    #             self._search_edit_recursive(child_node, word, new_prefix, new_offset, total, max_distance, candidates)
 
-    def _search_fuzzy_recursive(self, node: AttributeNode, word: str, prefix: str, offset: int, current_distance: int, threshold: float, candidates: Candidates) -> Candidates:
-        if node == None or node.children == None or len(node.children) == 0:
-            return
+    # def _search_fuzzy_recursive(self, node: AttributeNode, word: str, prefix: str, offset: int, current_distance: int, threshold: float, candidates: Candidates) -> Candidates:
+    #     if node == None or node.children == None or len(node.children) == 0:
+    #         return
         
-        # TODO: investigate if doing a running similarity is faster than skipping early ones
+    #     # TODO: investigate if doing a running similarity is faster than skipping early ones
         
-        for child in node.children:
-            new_prefix = f"{prefix}{child}"
+    #     for child in node.children:
+    #         new_prefix = f"{prefix}{child}"
 
-            min_sim = abs((len(new_prefix) - len(word)) / len(word))
+    #         min_sim = abs((len(new_prefix) - len(word)) / len(word))
 
-            # if theres' too many letters difference, there will be no more matches
-            if min_sim > threshold:
-                return
+    #         # if theres' too many letters difference, there will be no more matches
+    #         if min_sim > threshold:
+    #             return
             
-            # if there's not enough letters, we still need to recurse to check them
-            elif min_sim < 0:
-                self._search_fuzzy_recursive(child_node, word, new_prefix, offset + len(child), None, threshold, candidates)  
+    #         # if there's not enough letters, we still need to recurse to check them
+    #         elif min_sim < 0:
+    #             self._search_fuzzy_recursive(child_node, word, new_prefix, offset + len(child), None, threshold, candidates)  
 
-            # within the length range where you could have similarities, need to compare.
-            # NOTE: even if a word is too short, 
-            else:
-              r = ratio(word, new_prefix)
-              debug(f"Search word: {word}, Prefix: {new_prefix}, Ratio: {r}")
-              if r >= threshold:
-                  child_node = node.children[child]
-                  if child_node.attributes != None:
-                      candidates.append((r, new_prefix, child_node))
-                  self._search_fuzzy_recursive(child_node, word, new_prefix, offset + len(child), None, threshold, candidates)  
+    #         # within the length range where you could have similarities, need to compare.
+    #         # NOTE: even if a word is too short, 
+    #         else:
+    #           r = ratio(word, new_prefix)
+    #           debug(f"Search word: {word}, Prefix: {new_prefix}, Ratio: {r}")
+    #           if r >= threshold:
+    #               child_node = node.children[child]
+    #               if child_node.attributes != None:
+    #                   candidates.append((r, new_prefix, child_node))
+    #               self._search_fuzzy_recursive(child_node, word, new_prefix, offset + len(child), None, threshold, candidates)  
 
-    def stats(self, unique: bool = True):
-        average_length: int = 0
-        word_lengths: dict[int, int] = {}
-        letter_frequency: dict[str, int] = {}
-        letter_distribution: dict[str, dict[int, int]] = {}
-        num_nodes: int = 0
-        node_distribution: dict[int, int] = {}
-        lengths_at_node_depths: dict[int, dict[int, int]] = {}
-        depth: int = 0
+    # def stats(self, unique: bool = True):
+    #     average_length: int = 0
+    #     word_lengths: dict[int, int] = {}
+    #     letter_frequency: dict[str, int] = {}
+    #     letter_distribution: dict[str, dict[int, int]] = {}
+    #     num_nodes: int = 0
+    #     node_distribution: dict[int, int] = {}
+    #     lengths_at_node_depths: dict[int, dict[int, int]] = {}
+    #     depth: int = 0
 
-        # initialize the stack
-        prefix = ""
-        stack: deque[tuple[str, AttributeNode, int]] = deque()
-        if self.root.children != None:
-            items = self.root.children.items()
-            node_distribution[1] = len(items)
-            for key, value in self.root.children.items():
-                stack.append((key, value, 1))
+    #     # initialize the stack
+    #     prefix = ""
+    #     stack: deque[tuple[str, AttributeNode, int]] = deque()
+    #     if self.root.children != None:
+    #         items = self.root.children.items()
+    #         node_distribution[1] = len(items)
+    #         for key, value in self.root.children.items():
+    #             stack.append((key, value, 1))
 
-        while stack:
-            prefix, node, depth = stack.pop()
+    #     while stack:
+    #         prefix, node, depth = stack.pop()
 
-            num_nodes += 1
+    #         num_nodes += 1
 
-            # do the stats...
-            lengths_at_node_depths[depth] = lengths_at_node_depths.get(
-                depth, {})
-            lengths_at_node_depths[depth][len(
-                prefix)] = lengths_at_node_depths[depth].get(len(prefix), 0) + 1
+    #         # do the stats...
+    #         lengths_at_node_depths[depth] = lengths_at_node_depths.get(
+    #             depth, {})
+    #         lengths_at_node_depths[depth][len(
+    #             prefix)] = lengths_at_node_depths[depth].get(len(prefix), 0) + 1
 
-            if node.attributes != None:
-                # it's a word, so 'prefix' is the full word
-                length = len(prefix)
+    #         if node.attributes != None:
+    #             # it's a word, so 'prefix' is the full word
+    #             length = len(prefix)
 
-                count = 1 if unique else self.count_attributes(node)
+    #             count = 1 if unique else self.count_attributes(node)
 
-                # TODO: just compute afterwards based on word lengths?
-                average_length += length * count
-                word_lengths[length] = word_lengths.get(length, 0) + count
+    #             # TODO: just compute afterwards based on word lengths?
+    #             average_length += length * count
+    #             word_lengths[length] = word_lengths.get(length, 0) + count
 
-                for index, letter in enumerate(prefix):
-                    letter_frequency[letter] = letter_frequency.get(
-                        letter, 0) + count
-                    letter_distribution[letter] = letter_distribution.get(
-                        letter, {})
-                    letter_distribution[letter][index] = letter_distribution[letter].get(
-                        index, 0) + count
+    #             for index, letter in enumerate(prefix):
+    #                 letter_frequency[letter] = letter_frequency.get(
+    #                     letter, 0) + count
+    #                 letter_distribution[letter] = letter_distribution.get(
+    #                     letter, {})
+    #                 letter_distribution[letter][index] = letter_distribution[letter].get(
+    #                     index, 0) + count
 
-            if node.children != None:
-                items = node.children.items()
-                node_distribution[depth + 1] = node_distribution.get(depth + 1, 0) + len(items)
-                for key, value in items:
-                    stack.append((prefix + key, value, depth + 1))
+    #         if node.children != None:
+    #             items = node.children.items()
+    #             node_distribution[depth + 1] = node_distribution.get(depth + 1, 0) + len(items)
+    #             for key, value in items:
+    #                 stack.append((prefix + key, value, depth + 1))
 
-        return {
-            'num_words': self.num_words,
-            'average_length': average_length / self.num_words,
-            'word_lengths': word_lengths,
-            'letter_frequency': letter_frequency,
-            'letter_distribution': letter_distribution,
-            'num_nodes': num_nodes,
-            'node_distribution': node_distribution,
-            'lengths_at_node_depths': lengths_at_node_depths
-        }
+    #     return {
+    #         'num_words': self.num_words,
+    #         'average_length': average_length / self.num_words,
+    #         'word_lengths': word_lengths,
+    #         'letter_frequency': letter_frequency,
+    #         'letter_distribution': letter_distribution,
+    #         'num_nodes': num_nodes,
+    #         'node_distribution': node_distribution,
+    #         'lengths_at_node_depths': lengths_at_node_depths
+    #     }
 
 def levenstein(self, word1, word2):
     length = len(word2) + 1

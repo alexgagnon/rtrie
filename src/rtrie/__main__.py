@@ -11,8 +11,9 @@ def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("path")
   parser.add_argument("-d", "--depth", type = int)
-  parser.add_argument("-t", "--type", type = str, choices = ["Trie", "StringTrie", "ArrayTrie"], default = "Trie")
   parser.add_argument("-o", "--output", type = str)
+  parser.add_argument("-s", "--separator", type = str)
+  parser.add_argument("-t", "--type", type = str, choices = ["Trie", "StringTrie", "ArrayTrie"], default = "Trie")
   args = parser.parse_args()
   input = Path(args.path)
 
@@ -23,6 +24,13 @@ def main():
       init = ArrayTrie
     case 'Trie':
       init = Trie
+  
+  kwargs = {}
+
+  if args.depth != None:
+    kwargs['depth'] = args.depth
+  if args.separator != None:
+    kwargs['separator'] = args.separator
 
   with open(input) as f:
     _, ext = splitext(input)
@@ -32,7 +40,7 @@ def main():
       case _:
         raise "Unsupported filetype"
       # TODO: more types of inputs (i.e. csv, json, etc.)
-    trie = init(words = words)
+    trie = init(words = words, **kwargs)
     if args.output != None:
       output = Path(args.output)
       with open(output, 'wb') as o:

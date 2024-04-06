@@ -18,6 +18,8 @@ deepdiff = "^6.3.0"
 
 [tool.poetry.group.dev.dependencies]
 bumpver = "^2023.1124"
+pympler = "^1.0.1"
+sortedcontainers = "^2.4.0"
 
 [build-system]
 requires = ["poetry-core>=1.2.0"]
