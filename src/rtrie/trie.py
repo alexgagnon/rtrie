@@ -3,7 +3,7 @@ from collections import deque
 from collections.abc import MutableMapping
 from itertools import chain, tee
 import logging
-from logging import debug, error
+from logging import debug, error, info
 import os
 import sys
 from rapidfuzz.fuzz import ratio
@@ -124,7 +124,7 @@ class Trie(MutableMapping[str, Attributes]):
         Used to hook into the add method to perform additional operations after a node is added.
         By default it's a no-op.
         """
-        pass
+        info(f"Post add node: {kwargs}")
 
     def add(self, word: str, attributes: Attributes=True):
         """
@@ -211,8 +211,19 @@ class Trie(MutableMapping[str, Attributes]):
                         self.num_words += current.children[word].add_attributes(attributes)
                     break
 
-    def delete(self, word: str):
-        NotImplemented()
+    def delete(self, word: str, attributes: Attributes=None) -> int:
+        """
+        Deletes a word from the Trie
+        """
+        (prefix, key, node), prev = self._get_node(word)
+        print(prev)
+        if node != None:
+            self.num_words += node.delete_attributes(attributes)
+            # if the node no longer has no attributes and is a leaf, delete it
+            if node.attributes == None and (node.children == None or len(node.children) == 0): 
+                prev.children.pop(key)
+            return True
+        return False
 
     def add_words(self, words: Words):
         """
@@ -230,7 +241,7 @@ class Trie(MutableMapping[str, Attributes]):
         debug(">> get_matching_prefixes")
         debug(f"Offset: {offset}")
         if logging.getLogger().level == debug:
-            words_copy = tee(words)
+            words_copy = tee(words) # need to tee it since it's a iterator
             debug(f"Words: {list(words_copy)}")
         matches: list[Word] = []
         first = next(words, None)
@@ -275,7 +286,8 @@ class Trie(MutableMapping[str, Attributes]):
 
           `words` must be an iterator so that `next` is available
 
-          TODO: potentially could create subtries in parallel to speed it up
+          TODO: since it's in sorted order, potentially could create subtries in parallel to speed it up,
+          but we need to be careful about num_words
         """
 
         while 1:
@@ -305,7 +317,7 @@ class Trie(MutableMapping[str, Attributes]):
                     f"Adding word {first_label} with attributes {first_attributes}")
                 current.children[first_label] = self.node_factory()
                 self.num_words += current.children[first_label].add_attributes(first_attributes)
-                self.post_add_node(node = current, label = first_label_copy, prefix = '', depth = depth, max_length = 0)
+                self.post_add_node(node = current, label = first_label_copy, prefix = '', depth = depth)
                 if last == None:
                     return
                 continue
@@ -359,10 +371,12 @@ class Trie(MutableMapping[str, Attributes]):
                 debug("Recursing...")
                 self._add_words_recursive(
                     matches, current.children[prefix], offset + prefix_length, depth + 1)
-                self.post_add_node(node = current, label = first_label_copy[:offset + prefix_length], prefix = prefix, depth = depth, max_length = 0)
+                self.post_add_node(node = current, label = first_label_copy[:offset + prefix_length], prefix = prefix, depth = depth)
   
             if last == None:
                 break
+            
+        info(f"Finished adding words at depth {depth}")  
 
 
     def words(self, sort=False) -> Iterator[str]:
@@ -398,7 +412,7 @@ class Trie(MutableMapping[str, Attributes]):
                 for key, value in items:
                     stack.append((prefix + key, value))
 
-    def _get_node(self, word: str) -> tuple[Record, AttributeNode | None] | None:
+    def _get_node(self, word: str) -> Optional[tuple[Entry, Optional[AttributeNode]]]:
         """
         Returns the node that matches a given word, or None if it doesn't exist
         """
@@ -407,7 +421,7 @@ class Trie(MutableMapping[str, Attributes]):
     def _get_node_recursive(self, node: AttributeNode, previous_node: Optional[AttributeNode], word: str, prefix: str) -> Optional[tuple[Entry, Optional[AttributeNode]]]:
         if node.children != None:
             if (word in node.children):
-                return ((prefix + word, node.children[word]), previous_node)
+                return ((prefix, word, node.children[word]), node)
 
             # try seeing if there's a node with a matching prefix starting from shortest to longest
             for i in range(0, len(word)):

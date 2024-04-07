@@ -5,6 +5,9 @@
 # plan the inheritance hierarchy. For example, with the MaxLengthStringAttributeNode,
 # we intentionally left the MaxLengthNode's slots empty to avoid layout conflicts,
 # and then added the necessary slot in the MaxLengthStringAttributeNode.
+# NOTE: need to make sure that ALL classes that inherit from Node have the __slots__
+# attribute defined, even if it's empty, otherwise they will be __dict__ based and
+# consume more memory.
 ###
 
 from .types import Attributes
@@ -34,6 +37,9 @@ class AttributeNode(Node):
         self.children = children
         super().__init__(*args, **kwargs)
     
+    def __repr__(self):
+        return f"Attributes: {self.attributes}, Children: {len(self.children) if self.children != None else 0}"
+    
     def add_attributes(self, value: Attributes) -> int:
         """
           The default add method to use when one isn't provided. It adds to 'attributes' if defined, 
@@ -49,13 +55,12 @@ class AttributeNode(Node):
             is_new = 0
         self.attributes = value
         return is_new
-
-    def delete_attributes(self) -> int:
-        deleted = 0
+    
+    def delete_attributes(self, value=None) -> int:
         if self.attributes != None:
           self.attributes = None
-          deleted = -1
-        return deleted
+          return  -1
+        return 0
 
     def count_attributes(self) -> int:
         return 1 if self.attributes != None else 0
@@ -104,7 +109,17 @@ class StringAttributeNode(AttributeNode):
                 return 0
             self.attributes = f"{self.attributes}{self.separator}{str(value)}"
             return 1
-
+    
+    def delete_attributes(self, value: Any) -> int:
+        if self.attributes == None:
+            return 0
+        values = self.attributes.split(self.separator)
+        if value in values:
+            values.remove(value)
+            self.attributes = self.separator.join(values)
+            return -1
+        return 0
+    
     def count_attributes(self, value):
         return len(value.split(self.separator)) if value != None else 0
 
