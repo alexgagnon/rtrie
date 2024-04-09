@@ -31,18 +31,7 @@ def test_single_item():
 
 def adder(node, value):
     node.attributes = 'hello!'
-    return 1
-
-class CustomTrie(Trie):
-    def add_attributes(self, node, value):
-        return adder(node, value)
-
-def test_custom_adder():
-    trie = CustomTrie(None)
-    trie.add("Hello")
-    expected = {}
-    expected["Hello"] = AttributeNode('hello!')
-    assert(DeepDiff(trie.root.children, expected) == {})   
+    return 1  
 
 def test_two_unique_items():
     trie = Trie()

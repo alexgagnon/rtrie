@@ -9,6 +9,8 @@ import sys
 from rapidfuzz.fuzz import ratio
 from rapidfuzz.distance.DamerauLevenshtein import distance
 from typing import ItemsView, Iterator, Literal, Optional, cast
+
+from src.rtrie.node import GetNode
 from .types import Attributes, Record, Word, Words
 from .node import AttributeNode, Candidates, Children, Entry, Node, StringAttributeNode
 
@@ -71,7 +73,7 @@ class Trie(MutableMapping[str, Attributes]):
     def __init__(self, 
       root: AttributeNode | None=None, 
       words: Optional[Words] = None,
-      node_type: AttributeNode = StringAttributeNode
+      node_type: AttributeNode = AttributeNode
     ):
         """
             Initialize a Trie.
@@ -96,15 +98,15 @@ class Trie(MutableMapping[str, Attributes]):
         return self.delete(word)
 
     def __getitem__(self, word: str) -> Record | None:
-        result = self._get_node(word)
-        if result != None and result[0][1].attributes != None:
-            return (result[0][0], result[0][1].attributes)
+        result: GetNode = self._get_node(word)
+        if result != None and result.node.attributes != None:
+            return (result.prefix + result.key, result.node.attributes)
         return None
 
     def __setitem__(self, word: str, attributes: Attributes) -> None:
         result = self._get_node(word)
         if result != None:
-            result[0][1].attributes = attributes
+            result.node.attributes = attributes
 
     def __str__(self):
         return self.root.print(0)
@@ -114,7 +116,7 @@ class Trie(MutableMapping[str, Attributes]):
 
     def __contains__(self, word: object) -> bool:
         result = self._get_node(cast(str, word))
-        return result != None and result[0][1].attributes != None
+        return result != None and result.node != None and result.node.attributes != None
 
     def __iter__(self):
         return self.words()
@@ -211,27 +213,85 @@ class Trie(MutableMapping[str, Attributes]):
                         self.num_words += current.children[word].add_attributes(attributes)
                     break
 
-    def delete(self, word: str, attributes: Attributes=None) -> int:
+    def _delete_node(self, node: Node, parents: list[Node], key: str) -> bool:
         """
-        Deletes a word from the Trie
+        Tries to delete a node from the Trie if possible.
+        This should NOT be called directly, but rather through `delete` or `delete_attributes`
         """
-        (prefix, key, node), prev = self._get_node(word)
-        print(prev)
-        if node != None:
-            self.num_words += node.delete_attributes(attributes)
-            # if the node no longer has no attributes and is a leaf, delete it
-            if node.attributes == None and (node.children == None or len(node.children) == 0): 
-                prev.children.pop(key)
+        # root
+        #
+        # root -> a
+        #
+        # root -> a
+        #     `-> b
+        # cases
+        #
+        # node is None - do nothing
+        # node is root with no children, prev is None - do nothing # TODO: confirm behaviour
+        # node is root with one child, prev is None - set root to child
+        # node is root with multiple children, prev is None - 
+        # node is leaf, prev is root - delete node, remove key
+        # node is leaf, prev is intermediate - delete node, remove key
+        # node is intermediate with one child, prev is intermediate, 
+        # node is intermediate with multiple children, prev is intermediate
+
+        # if it's None or a word, we can't delete it
+        if node == None or node.attributes != None:
+            return False
+
+        prev = parents.pop() if len(parents) > 0 else None        
+        
+        if node.children != None:
+            length = len(node.children)
+            if node == self.root:
+                if length == 1:
+                  child_key, child_node = node.children.popitem()
+                  self.root = child_node
+                  return True
+                # elif length == 0: # no children, TODO: confirm if we need to leave root in place?
+                # else: # multiple children, do nothing
+        
+            else:
+                if length == 0: # leaf, just delete node and key
+                    prev.children.pop(key)
+                    return True
+                elif length == 1: # intermediate with one child, merge
+                    child_key, child_node = node.children.popitem()
+                    prev.children[key + child_key] = child_node
+                    del prev.children[key]
+                    return True
+                # else: # intermediate with multiple children, do nothing
+        else: # leaf node
+            prev.children.pop(key)
             return True
         return False
 
-    def add_words(self, words: Words):
+    def delete(self, word: str) -> bool:
         """
-            This function is to speed up initialzing a Trie by using a sorted collection of words.
+        Deletes a word from the Trie
+        """
+        result = self._get_node(word)
+        if result == None or result.node == None:
+            return False
+        if result.node.attributes != None:
+            self.num_words -= 1
+            result.node.attributes = None
+        return self._delete_node(result.node, result.parents, result.key)
 
-            NOTE: the words passed in MUST be in lexigraphically sorted order, or else the output will not be correct
+    def delete_attributes(self, word: str, attributes: Attributes) -> int:
         """
-        self._add_words_recursive(words, self.root, 0, 0)
+        Deletes a specific attribute from a word. Deleting an attribute does not necessarily 
+        delete the word from the Trie, but to keep the Trie correct, it will delete the node
+        if it has no remaining attributes
+        """
+        result = self._get_node(word)
+        deleted = False
+        if result != None and result.node != None:
+            deleted = result.node.delete_attributes(attributes)
+        if deleted:
+            self.num_words -= 1
+        self._delete_node(result.node, result.parents, result.key) # will restructure Trie if needed
+        return deleted
 
     def get_matching_prefixes(self, words: Words, offset: int) -> tuple[list[Word], Optional[Word]]:
         """
@@ -279,6 +339,14 @@ class Trie(MutableMapping[str, Attributes]):
         debug("<< get_matching_prefixes")
         # return it as a list so we can use len() on it
         return (matches, current)
+    
+    def add_words(self, words: Words):
+        """
+            This function is to speed up initialzing a Trie by using a sorted iterable of words.
+
+            NOTE: the words passed in MUST be in lexigraphically sorted order, or else the output will not be correct
+        """
+        self._add_words_recursive(words, self.root, 0, 0)
 
     def _add_words_recursive(self, words: Words, current: AttributeNode, offset: int, depth: int):
         """
@@ -286,8 +354,8 @@ class Trie(MutableMapping[str, Attributes]):
 
           `words` must be an iterator so that `next` is available
 
-          TODO: since it's in sorted order, potentially could create subtries in parallel to speed it up,
-          but we need to be careful about num_words
+          TODO: since it's in sorted order, potentially could create subtries in parallel to speed it up since each
+          prefix will not be visited again, but we'd need to be careful about num_words
         """
 
         while 1:
@@ -412,23 +480,24 @@ class Trie(MutableMapping[str, Attributes]):
                 for key, value in items:
                     stack.append((prefix + key, value))
 
-    def _get_node(self, word: str) -> Optional[tuple[Entry, Optional[AttributeNode]]]:
+    def _get_node(self, word: str) -> GetNode:
         """
         Returns the node that matches a given word, or None if it doesn't exist
         """
-        return self._get_node_recursive(self.root, None, word, "")
+        return self._get_node_recursive(self.root, word, "", parents=[])
 
-    def _get_node_recursive(self, node: AttributeNode, previous_node: Optional[AttributeNode], word: str, prefix: str) -> Optional[tuple[Entry, Optional[AttributeNode]]]:
+    def _get_node_recursive(self, node: Node, remainder: str, prefix: str, parents: list[Node]) -> GetNode:
         if node.children != None:
-            if (word in node.children):
-                return ((prefix, word, node.children[word]), node)
+            parents.append(node)
+            if (remainder in node.children):
+                return GetNode(node.children[remainder], parents, prefix, remainder)
 
             # try seeing if there's a node with a matching prefix starting from shortest to longest
-            for i in range(0, len(word)):
-                w = word[:i]
+            for i in range(0, len(remainder)):
+                w = remainder[:i]
                 if w in node.children:
-                    debug(f"Prefix: {prefix}, Word: {word}")
-                    return self._get_node_recursive(node.children[w], node, word[i:], prefix + w)
+                    debug(f"Prefix: {prefix}, remainder: {remainder}")
+                    return self._get_node_recursive(node.children[w], remainder[i:], prefix + w, parents)
 
             return None
         return None

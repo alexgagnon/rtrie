@@ -11,13 +11,28 @@
 ###
 
 from .types import Attributes
-from typing import Any, Optional, TypeAlias
+from typing import Any, Optional, TypeAlias, TypedDict
+from abc import ABC
 
 Entry: TypeAlias = tuple[str, 'AttributeNode']
-Children: TypeAlias = dict[str, 'AttributeNode']
-Candidates: TypeAlias = list[tuple[int, str, 'AttributeNode']]
+Children: TypeAlias = dict[str, 'Node']
+Candidates: TypeAlias = list[tuple[int, str, 'Node']]
 
-class Node:
+class GetNode():
+    __slots__ = ('node', 'parents', 'prefix', 'key')
+
+    node: 'Node'
+    parents: list['Node']
+    prefix: str
+    key: str
+
+    def __init__(self, node: 'Node', parents: list['Node'], prefix: str, key: str):
+        self.node = node
+        self.parents = parents
+        self.prefix = prefix
+        self.key = key
+
+class Node(ABC):
     """
       Base Abstract Node type
     """
@@ -56,11 +71,11 @@ class AttributeNode(Node):
         self.attributes = value
         return is_new
     
-    def delete_attributes(self, value=None) -> int:
+    def delete_attributes(self, value=None) -> bool:
         if self.attributes != None:
           self.attributes = None
-          return  -1
-        return 0
+          return  True
+        return False
 
     def count_attributes(self) -> int:
         return 1 if self.attributes != None else 0
@@ -75,6 +90,8 @@ class AttributeNode(Node):
                 f"{key}({child.attributes}): {child.print(depth+1)}"
         return string
     
+# TODO: BooleanAttributeNode...
+
 class MaxLengthNode(Node):
     """
       Node that supports a max length
@@ -110,15 +127,18 @@ class StringAttributeNode(AttributeNode):
             self.attributes = f"{self.attributes}{self.separator}{str(value)}"
             return 1
     
-    def delete_attributes(self, value: Any) -> int:
+    def delete_attributes(self, value: Any) -> bool:
         if self.attributes == None:
-            return 0
+            return False
         values = self.attributes.split(self.separator)
         if value in values:
             values.remove(value)
-            self.attributes = self.separator.join(values)
-            return -1
-        return 0
+            if len(values) == 0:
+                self.attributes = None
+            else:
+                self.attributes = self.separator.join(values)
+            return True
+        return False
     
     def count_attributes(self, value):
         return len(value.split(self.separator)) if value != None else 0
