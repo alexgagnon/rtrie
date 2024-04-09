@@ -4,7 +4,6 @@ A generalized radix trie implementation in pure python.
 
 ## TODO
 
-- [ ] delete method
 - [ ] starts_with method
 - [ ] running edit distance
 - [ ] sys.intern dict keys

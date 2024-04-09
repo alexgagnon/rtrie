@@ -28,11 +28,6 @@ def test_single_item():
     expected["Hello"] = AttributeNode(True)
     assert(DeepDiff(trie.root.children, expected) == {})
 
-
-def adder(node, value):
-    node.attributes = 'hello!'
-    return 1  
-
 def test_two_unique_items():
     trie = Trie()
     trie.add("Hello")
@@ -111,6 +106,69 @@ def test_nodes():
     trie = Trie(words = iter(sorted(words)))
     num_nodes = sum(1 for _ in trie.nodes())
     assert(num_nodes == 6)
+
+def test_delete():
+    words = ["Help", "He", "There", "Hello", "Hi", "Hel"]
+    trie = Trie(words = iter(sorted(words)))
+    print(trie)
+    assert(len(trie) == 6)
+
+    # should do nothing, 'H' is an intermediate node that isn't a word
+    del trie["H"]
+    assert('H' not in trie)
+    assert(len(trie) == 6)
+
+    print("Deleted 'H'")
+    print(trie)
+
+    # should reduce number of words but not change structure, since
+    # 'Hel' is an intermediate node that is a word, with multiple children
+    del trie["Hel"]
+    assert('Hel' not in trie)
+    assert(len(trie) == 5)
+
+    print("Deleted 'Hel'")
+    print(trie)
+
+    # should delete leaf
+    assert('Help' in trie)
+    del trie["Help"]
+    assert('Help' not in trie)
+    assert(len(trie) == 4)
+
+    print("Deleted 'Help'")
+    print(trie)
+
+    # should delete leaf node who's parent is root
+    assert('There' in trie)
+    del trie["There"]
+    assert('There' not in trie)
+    assert(len(trie) == 3)
+
+    print("Deleted 'There'")
+    print(trie)
+
+    del trie['Hi']
+    assert('Hi' not in trie)
+    assert(len(trie) == 2)
+
+    print("Deleted 'Hi'")
+    print(trie)
+
+    del trie['Hello']
+    assert('Hello' not in trie)
+    assert(len(trie) == 1)
+
+    print("Deleted 'Hello'")
+    print(trie)
+
+    del trie['He']
+    assert('He' not in trie)
+    assert(len(trie) == 0)
+
+    print("Deleted 'He'")
+    print(trie)
+
 
 def test_get_longest_prefixes_index():
     words = ["Hello", "Hi"]

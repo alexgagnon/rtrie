@@ -100,7 +100,8 @@ class Trie(MutableMapping[str, Attributes]):
     def __getitem__(self, word: str) -> Record | None:
         result: GetNode = self._get_node(word)
         if result != None and result.node.attributes != None:
-            return (result.prefix + result.key, result.node.attributes)
+            parent = result.parents[-1]
+            return (result.prefix + (parent[1] if parent != None else ""), result.node.attributes)
         return None
 
     def __setitem__(self, word: str, attributes: Attributes) -> None:
@@ -213,58 +214,38 @@ class Trie(MutableMapping[str, Attributes]):
                         self.num_words += current.children[word].add_attributes(attributes)
                     break
 
-    def _delete_node(self, node: Node, parents: list[Node], key: str) -> bool:
+    def _restructure(self, node: Node, parents: list[Node]) -> None:
         """
-        Tries to delete a node from the Trie if possible.
+        Ascends the Trie to restructure it after a node is deleted.
         This should NOT be called directly, but rather through `delete` or `delete_attributes`
         """
-        # root
-        #
-        # root -> a
-        #
-        # root -> a
-        #     `-> b
-        # cases
-        #
-        # node is None - do nothing
-        # node is root with no children, prev is None - do nothing # TODO: confirm behaviour
-        # node is root with one child, prev is None - set root to child
-        # node is root with multiple children, prev is None - 
-        # node is leaf, prev is root - delete node, remove key
-        # node is leaf, prev is intermediate - delete node, remove key
-        # node is intermediate with one child, prev is intermediate, 
-        # node is intermediate with multiple children, prev is intermediate
+        children = node.children
+        (prev, key) = parents.pop() if len(parents) > 0 else (None, None)  
+        debug(f"Restructuring node: {node}, prev: {prev}, key: {key}")    
 
-        # if it's None or a word, we can't delete it
-        if node == None or node.attributes != None:
-            return False
-
-        prev = parents.pop() if len(parents) > 0 else None        
-        
-        if node.children != None:
-            length = len(node.children)
-            if node == self.root:
-                if length == 1:
-                  child_key, child_node = node.children.popitem()
-                  self.root = child_node
-                  return True
-                # elif length == 0: # no children, TODO: confirm if we need to leave root in place?
-                # else: # multiple children, do nothing
-        
-            else:
-                if length == 0: # leaf, just delete node and key
+        # if the node is None, is a word, or has multiple children, nothing to do
+        if node == None or node.attributes != None or (children != None and len(children) > 1):
+            debug('Node is None, a word, or has multiple children, returning')
+            return
+        else:
+            if children == None or len(children) == 0:
+                if prev != None:
+                    debug('Deleting node')
+                    debug(f"Prev: {prev}, key: {key}")
                     prev.children.pop(key)
-                    return True
-                elif length == 1: # intermediate with one child, merge
-                    child_key, child_node = node.children.popitem()
-                    prev.children[key + child_key] = child_node
-                    del prev.children[key]
-                    return True
-                # else: # intermediate with multiple children, do nothing
-        else: # leaf node
-            prev.children.pop(key)
-            return True
-        return False
+                    debug(prev)
+            else: 
+                # len(children) == 1, so just pop the only item
+                child_key, child_node = children.popitem()
+                if prev != None:
+                    debug('Merging node with child')
+                    debug(key + child_key)
+                    new_key = sys.intern(key + child_key)
+                    prev.children[new_key] = child_node
+                    prev.children.pop(key)
+
+        if prev != self.root:
+            self._restructure(prev, parents)
 
     def delete(self, word: str) -> bool:
         """
@@ -276,7 +257,8 @@ class Trie(MutableMapping[str, Attributes]):
         if result.node.attributes != None:
             self.num_words -= 1
             result.node.attributes = None
-        return self._delete_node(result.node, result.parents, result.key)
+        self._restructure(result.node, result.parents)
+        return 
 
     def delete_attributes(self, word: str, attributes: Attributes) -> int:
         """
@@ -290,7 +272,7 @@ class Trie(MutableMapping[str, Attributes]):
             deleted = result.node.delete_attributes(attributes)
         if deleted:
             self.num_words -= 1
-        self._delete_node(result.node, result.parents, result.key) # will restructure Trie if needed
+        self._restructure(result.node, result.parents) # will restructure Trie if needed
         return deleted
 
     def get_matching_prefixes(self, words: Words, offset: int) -> tuple[list[Word], Optional[Word]]:
@@ -482,22 +464,27 @@ class Trie(MutableMapping[str, Attributes]):
 
     def _get_node(self, word: str) -> GetNode:
         """
-        Returns the node that matches a given word, or None if it doesn't exist
+        Returns the node that matches a given word and the stack of Node/key pairs that led to it, or None if it doesn't exist.
+        Prefix and remainder split the word, i.e. prefix = 'He', remainder = 'llo'.
         """
         return self._get_node_recursive(self.root, word, "", parents=[])
 
     def _get_node_recursive(self, node: Node, remainder: str, prefix: str, parents: list[Node]) -> GetNode:
+        """
+        Recursively attempt to find a node that matches a given word.
+        """
         if node.children != None:
-            parents.append(node)
             if (remainder in node.children):
-                return GetNode(node.children[remainder], parents, prefix, remainder)
+                parents.append((node, remainder))
+                return GetNode(node.children[remainder], parents, prefix)
 
             # try seeing if there's a node with a matching prefix starting from shortest to longest
             for i in range(0, len(remainder)):
-                w = remainder[:i]
-                if w in node.children:
-                    debug(f"Prefix: {prefix}, remainder: {remainder}")
-                    return self._get_node_recursive(node.children[w], remainder[i:], prefix + w, parents)
+                key = remainder[:i]
+                if key in node.children:
+                    debug(f"Prefix: {prefix}, remainder: {remainder}, key: {key}")
+                    parents.append((node, key))
+                    return self._get_node_recursive(node.children[key], remainder[i:], prefix + key, parents)
 
             return None
         return None

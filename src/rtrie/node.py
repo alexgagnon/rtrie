@@ -14,7 +14,7 @@ from .types import Attributes
 from typing import Any, Optional, TypeAlias, TypedDict
 from abc import ABC
 
-Entry: TypeAlias = tuple[str, 'AttributeNode']
+Entry: TypeAlias = tuple[str, 'Node']
 Children: TypeAlias = dict[str, 'Node']
 Candidates: TypeAlias = list[tuple[int, str, 'Node']]
 
@@ -26,11 +26,10 @@ class GetNode():
     prefix: str
     key: str
 
-    def __init__(self, node: 'Node', parents: list['Node'], prefix: str, key: str):
+    def __init__(self, node: 'Node', parents: list[tuple['Node', str]], prefix: str):
         self.node = node
         self.parents = parents
         self.prefix = prefix
-        self.key = key
 
 class Node(ABC):
     """
@@ -53,7 +52,7 @@ class AttributeNode(Node):
         super().__init__(*args, **kwargs)
     
     def __repr__(self):
-        return f"Attributes: {self.attributes}, Children: {len(self.children) if self.children != None else 0}"
+        return f"(Attributes: {self.attributes}, Children: {self.children.keys() if self.children != None else None})"
     
     def add_attributes(self, value: Attributes) -> int:
         """
