@@ -1,7 +1,9 @@
 import pytest
 from rtrie import AttributeNode, Trie, get_longest_prefix_index, get_longest_prefixes_index
 from deepdiff import DeepDiff
-        
+import logging
+from logging import info
+
 words = ['Hello', 'Hey', 'I', 'Man', 'Man', 'Manta', 'Manitee', 'There']
 add_words = ['Hell', 'M', 'Man', 'Theres']
 
@@ -19,7 +21,9 @@ def test_trie():
     assert('He' not in trie)
     assert(len(trie) == 10)
     assert(trie['Hey'] == ('Hey', True))
-    assert(trie['Nope'] == None)
+
+    with pytest.raises(KeyError):
+        trie['Nope']
     
 def test_single_item():
     trie = Trie()
@@ -110,7 +114,7 @@ def test_nodes():
 def test_delete():
     words = ["Help", "He", "There", "Hello", "Hi", "Hel"]
     trie = Trie(words = iter(sorted(words)))
-    print(trie)
+    info(trie)
     assert(len(trie) == 6)
 
     # should do nothing, 'H' is an intermediate node that isn't a word
@@ -118,8 +122,8 @@ def test_delete():
     assert('H' not in trie)
     assert(len(trie) == 6)
 
-    print("Deleted 'H'")
-    print(trie)
+    info("Deleted 'H'")
+    info(trie)
 
     # should reduce number of words but not change structure, since
     # 'Hel' is an intermediate node that is a word, with multiple children
@@ -127,8 +131,8 @@ def test_delete():
     assert('Hel' not in trie)
     assert(len(trie) == 5)
 
-    print("Deleted 'Hel'")
-    print(trie)
+    info("Deleted 'Hel'")
+    info(trie)
 
     # should delete leaf
     assert('Help' in trie)
@@ -136,8 +140,8 @@ def test_delete():
     assert('Help' not in trie)
     assert(len(trie) == 4)
 
-    print("Deleted 'Help'")
-    print(trie)
+    info("Deleted 'Help'")
+    info(trie)
 
     # should delete leaf node who's parent is root
     assert('There' in trie)
@@ -145,30 +149,48 @@ def test_delete():
     assert('There' not in trie)
     assert(len(trie) == 3)
 
-    print("Deleted 'There'")
-    print(trie)
+    info("Deleted 'There'")
+    info(trie)
 
     del trie['Hi']
     assert('Hi' not in trie)
     assert(len(trie) == 2)
 
-    print("Deleted 'Hi'")
-    print(trie)
+    info("Deleted 'Hi'")
+    info(trie)
 
     del trie['Hello']
     assert('Hello' not in trie)
     assert(len(trie) == 1)
 
-    print("Deleted 'Hello'")
-    print(trie)
+    info("Deleted 'Hello'")
+    info(trie)
 
     del trie['He']
     assert('He' not in trie)
     assert(len(trie) == 0)
 
-    print("Deleted 'He'")
-    print(trie)
+    info("Deleted 'He'")
+    info(trie)
 
+def test_starts_with():
+    words = ["Hey", "There", "Hello", "Hi"]
+    trie = Trie(words = iter(sorted(words)))
+    assert(DeepDiff(list(trie.starts_with("H")), [("Hey", True), ("Hello", True), ("Hi", True)]))
+    assert(list(trie.starts_with("He")), [("Hey", True), ("Hello", True)])
+    assert(DeepDiff(list(trie.starts_with("There")), [("There", True)]))
+    assert(DeepDiff(list(trie.starts_with("Th")), [("There", True)]))
+    assert(DeepDiff(list(trie.starts_with("T")), [("There", True)]))
+
+def test_prefixes_of():
+    words = ["Hey", "H", "There", "Hello", "Hi"]
+    trie = Trie(words = iter(sorted(words)))
+    assert(trie.prefixes_of("Heyllo") == [("H", True),("Hey", True)])
+    assert(trie.prefixes_of("Therein") == [("There", True)])
+    assert(trie.prefixes_of("H") == [("H", True)])
+    assert(trie.prefixes_of("Hii") == [("H", True), ("Hi", True)])
+    assert(trie.prefixes_of("Hiiii") == [("H", True), ("Hi", True)])
+    assert(trie.prefixes_of("L") == [])
 
 def test_get_longest_prefixes_index():
     words = ["Hello", "Hi"]

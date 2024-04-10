@@ -4,9 +4,10 @@ A generalized radix trie implementation in pure python.
 
 ## TODO
 
-- [ ] starts_with method
+- [ ] prefix method
 - [ ] running edit distance
 - [ ] sys.intern dict keys
+- [ ] confirm if nodes/items in Node instead of Trie has impact
 
 ## Usage
 
@@ -21,6 +22,6 @@ There are two kinds of search, exact lookup (i.e. `<term> in <trie>`) and candid
 
 Candidate search has two included algorithms: edit distance and similarity ratio
 
-**NOTE: for similarity ratio to work well, you need to use MaxDepthNode instead of Node, since the inclusion of the depth allows for optimizing the search path. MaxDepthNode includes one additional slot, `max_letters`.**
+**NOTE: to speed up search, you need to use a subclass of MaxDepthNode, since the inclusion of the depth allows for optimizing the search path. MaxDepthNode includes one additional slot, `max_depth`.**
 
 This optimization works by comparing the current similarity ratio to what it could be given the remaining letters in the path, i.e. if the remaining letters were all incorrect and it still passes the threshold, then add the entire subtrie to the list of candidates. Otherwise if we assume they were all correct and it doesn't pass the threshold, then we can skip the entire subtrie.

@@ -98,16 +98,14 @@ class Trie(MutableMapping[str, Attributes]):
         return self.delete(word)
 
     def __getitem__(self, word: str) -> Record | None:
-        result: GetNode = self._get_node(word)
-        if result != None and result.node.attributes != None:
-            parent = result.parents[-1]
-            return (result.prefix + (parent[1] if parent != None else ""), result.node.attributes)
-        return None
+        path, label = self._get_node(word)
+        node = path.pop()[0] if len(path) > 0 else None
+        if label == word and node != None and node.is_word():
+            return (label, node.attributes)
+        raise KeyError(word)
 
     def __setitem__(self, word: str, attributes: Attributes) -> None:
-        result = self._get_node(word)
-        if result != None:
-            result.node.attributes = attributes
+        self.add(word, attributes)
 
     def __str__(self):
         return self.root.print(0)
@@ -116,8 +114,8 @@ class Trie(MutableMapping[str, Attributes]):
         return self.num_words
 
     def __contains__(self, word: object) -> bool:
-        result = self._get_node(cast(str, word))
-        return result != None and result.node != None and result.node.attributes != None
+        path, label = self._get_node(cast(str, word))
+        return label == word and (path[-1][0].is_word() if path != None and len(path) > 0 else False)
 
     def __iter__(self):
         return self.words()
@@ -251,14 +249,15 @@ class Trie(MutableMapping[str, Attributes]):
         """
         Deletes a word from the Trie
         """
-        result = self._get_node(word)
-        if result == None or result.node == None:
-            return False
-        if result.node.attributes != None:
+        path, label = self._get_node(word)
+        node = path.pop()[0] if len(path) > 0 else None
+        if label == word and node != None and node.is_word():
             self.num_words -= 1
-            result.node.attributes = None
-        self._restructure(result.node, result.parents)
-        return 
+            node.attributes = None
+            self._restructure(node, path)
+        else:
+            return False
+        return True
 
     def delete_attributes(self, word: str, attributes: Attributes) -> int:
         """
@@ -441,64 +440,65 @@ class Trie(MutableMapping[str, Attributes]):
         """
         BF traversal of the Trie, optionally in sorted order
         """
-        prefix = ""
-        stack: deque[Entry] = deque()
-        if self.root.children != None:
-            items = self.root.children.items()
-            if sort:
-                items = reversed(sorted(items))
-            for item in items:
-                stack.append(item)
-
-        while stack:
-            prefix, node = stack.pop()
-
-            yield (prefix, node)
-
-            if node.children != None:
-                items = node.children.items()
-                if sort:
-                    items = reversed(sorted(items))
-                for key, value in items:
-                    stack.append((prefix + key, value))
+        return self.root.nodes(sort)
 
     def _get_node(self, word: str) -> GetNode:
         """
-        Returns the node that matches a given word and the stack of Node/key pairs that led to it, or None if it doesn't exist.
-        Prefix and remainder split the word, i.e. prefix = 'He', remainder = 'llo'.
+        Returns the stack of Node/key pairs that leads to a node with a potentially matching label.
+        The top of the stack will either be a match or the closest node that matches the prefix.
         """
-        return self._get_node_recursive(self.root, word, "", parents=[])
+        return self._get_node_recursive(self.root, word, "", path=[])
 
-    def _get_node_recursive(self, node: Node, remainder: str, prefix: str, parents: list[Node]) -> GetNode:
-        """
-        Recursively attempt to find a node that matches a given word.
-        """
+    def _get_node_recursive(self, node: Node, remainder: str, prefix: str, path: list[tuple[Node, str]]) -> list[tuple[Node, str]]:
         if node.children != None:
             if (remainder in node.children):
-                parents.append((node, remainder))
-                return GetNode(node.children[remainder], parents, prefix)
+                path.append((node, remainder))
+                path.append((node.children[remainder], None))
+                return (path, prefix + remainder)
 
             # try seeing if there's a node with a matching prefix starting from shortest to longest
             for i in range(0, len(remainder)):
                 key = remainder[:i]
                 if key in node.children:
                     debug(f"Prefix: {prefix}, remainder: {remainder}, key: {key}")
-                    parents.append((node, key))
-                    return self._get_node_recursive(node.children[key], remainder[i:], prefix + key, parents)
+                    path.append((node, key))
+                    return self._get_node_recursive(node.children[key], remainder[i:], prefix + key, path)
 
-            return None
-        return None
+        return (path, prefix)
 
     # TODO: this returns a generator which technically isn't correct for a MultipleMap, but works for most cases
     def items(self) -> ItemsView[str, Attributes]:
         """
-            Method to make it interoperable with dict, where keys are the words, and values are the attributes
+        Method to make it interoperable with dict, where keys are the words, and values are the attributes
         """
-        
-        for prefix, node in self.nodes():
-            if (node.attributes != None):
-                yield (prefix, node.attributes)
+        return self.root.items()
 
+    def starts_with(self, prefix: str) -> Iterator[str]:
+        """
+        Returns a generator consisting of all nodes beneath the nearest node matching `prefix`.
+        """
+        path, label = self._get_node(prefix)
+        node = path.pop()[0] if len(path) > 0 else None
+        if node == None:
+            return self.root.items()
+        else:
+            return node.items(label)
+        
+    def prefixes_of(self, string: str) -> str:
+        """
+        Returns all words that are a prefix of a given string.
+        """
+        path, label = self._get_node(string)
+        prefixes = []
+        prefix = ""
+        for node, key in path:
+            if key != None:
+                prefix += key
+                child = node.children[key]
+                if child.is_word():
+                    prefixes.append((prefix, child.attributes))
+        return prefixes
+    
     def search(self, word, type: Literal['fuzzy', 'edit'] = 'edit', threshold: int | float = 0) -> Candidates:
 
         # Pruning phase

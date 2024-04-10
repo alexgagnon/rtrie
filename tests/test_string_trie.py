@@ -7,4 +7,5 @@ words = [(word, i) for i, word in enumerate(words)]
 
 def test_string_trie():
     trie = StringTrie(words = iter(words))
-    print(trie)
+    for word, i in words:
+        assert(word in trie)

@@ -10,6 +10,7 @@
 # consume more memory.
 ###
 
+from collections import deque
 from .types import Attributes
 from typing import Any, Optional, TypeAlias, TypedDict
 from abc import ABC
@@ -33,27 +34,63 @@ class GetNode():
 
 class Node(ABC):
     """
-      Base Abstract Node type
+      Base Node type
     """
-    __slots__ = ()
+    __slots__ = ('children')
+
+    children: Optional[Children]
+    
+    def __init__(self, children):
+        self.children = children
 
 class AttributeNode(Node):
     """
       Node that supports attributes
     """
-    __slots__ = ('attributes', 'children')
+    __slots__ = ('attributes')
 
     attributes: Attributes
-    children: Optional[Children]
 
     def __init__(self, attributes: Attributes = None, children: Optional[Children] = None, *args, **kwargs):
         self.attributes = attributes
-        self.children = children
-        super().__init__(*args, **kwargs)
+        super().__init__(children, *args, **kwargs)
     
     def __repr__(self):
         return f"(Attributes: {self.attributes}, Children: {self.children.keys() if self.children != None else None})"
     
+    def is_word(self) -> bool:
+        return self.attributes != None
+    
+    def nodes(self, sort: bool = False, prefix: str = ""):
+        """
+        BFS through child nodes. If sort is True, then sort the children in reverse order. If a prefix is provided,
+        prepend it to each yielded key.
+        """
+        stack: deque[Entry] = deque()
+        if self.children != None:
+            items = self.children.items()
+            if sort:
+                items = reversed(sorted(items))
+            for item in items:
+                stack.append(item)
+
+        while stack:
+            p, node = stack.pop()
+
+            yield (prefix + p, node)
+
+            if node.children != None:
+                items = node.children.items()
+                if sort:
+                    items = reversed(sorted(items))
+                for key, value in items:
+                    stack.append((p + key, value))
+   
+    def items(self, prefix: str = ""):
+        for p, node in self.nodes(prefix = prefix):
+            if (node.attributes != None):
+                yield (p, node.attributes)
+
     def add_attributes(self, value: Attributes) -> int:
         """
           The default add method to use when one isn't provided. It adds to 'attributes' if defined, 
