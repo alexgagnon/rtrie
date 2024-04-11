@@ -61,7 +61,7 @@ class AttributeNode(Node):
     def is_word(self) -> bool:
         return self.attributes != None
     
-    def nodes(self, sort: bool = False, prefix: str = ""):
+    def nodes(self, include_root = False, sort: bool = False, prefix: str = ""):
         """
         BFS through child nodes. If sort is True, then sort the children in reverse order. If a prefix is provided,
         prepend it to each yielded key.
