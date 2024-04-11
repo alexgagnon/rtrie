@@ -4,7 +4,6 @@ A generalized radix trie implementation in pure python.
 
 ## TODO
 
-- [ ] prefix method
 - [ ] running edit distance
 - [ ] sys.intern dict keys
 - [ ] confirm if nodes/items in Node instead of Trie has impact

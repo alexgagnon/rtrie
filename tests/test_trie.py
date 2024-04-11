@@ -1,8 +1,12 @@
 import pytest
 from rtrie import AttributeNode, Trie, get_longest_prefix_index, get_longest_prefixes_index
 from deepdiff import DeepDiff
-import logging
 from logging import info
+from rapidfuzz.distance.DamerauLevenshtein import distance
+
+# NOTE:
+# DeepDiff returns an empty object if the two values are the same, and empty dictionaries
+# are Falsey, so we use `not DeepDiff(...)` or `DeepDiff(...) == {}` to check for equality
 
 words = ['Hello', 'Hey', 'I', 'Man', 'Man', 'Manta', 'Manitee', 'There']
 add_words = ['Hell', 'M', 'Man', 'Theres']
@@ -176,11 +180,11 @@ def test_delete():
 def test_starts_with():
     words = ["Hey", "There", "Hello", "Hi"]
     trie = Trie(words = iter(sorted(words)))
-    assert(DeepDiff(list(trie.starts_with("H")), [("Hey", True), ("Hello", True), ("Hi", True)]))
-    assert(list(trie.starts_with("He")), [("Hey", True), ("Hello", True)])
-    assert(DeepDiff(list(trie.starts_with("There")), [("There", True)]))
-    assert(DeepDiff(list(trie.starts_with("Th")), [("There", True)]))
-    assert(DeepDiff(list(trie.starts_with("T")), [("There", True)]))
+    assert(not DeepDiff(list(trie.starts_with("H")), [("Hey", True), ("Hello", True), ("Hi", True)], ignore_order=True))
+    assert(not DeepDiff(list(trie.starts_with("He")), [("Hey", True), ("Hello", True)], ignore_order=True))
+    assert(not DeepDiff(list(trie.starts_with("There")), [("There", True)], ignore_order=True))
+    assert(not DeepDiff(list(trie.starts_with("Th")), [("There", True)], ignore_order=True))
+    assert(not DeepDiff(list(trie.starts_with("T")), [("There", True)], ignore_order=True))
 
 def test_prefixes_of():
     words = ["Hey", "H", "There", "Hello", "Hi"]
@@ -191,6 +195,24 @@ def test_prefixes_of():
     assert(trie.prefixes_of("Hii") == [("H", True), ("Hi", True)])
     assert(trie.prefixes_of("Hiiii") == [("H", True), ("Hi", True)])
     assert(trie.prefixes_of("L") == [])
+
+def test_edit_distance():
+    words = ["Hey", "H", "There", "Hello", "Hi"]
+    trie = Trie(words = iter(sorted(words)))
+    hash_set = set(words)
+    for word in words:
+        assert(trie.edit_distance(word, 0) == [(0, word, True)])
+        assert([(0, w, True) for w in hash_set if distance(word, w) == 0] == [(0, word, True)])
+    assert(trie.edit_distance("Magna", 4) == [])
+    assert(not DeepDiff(trie.edit_distance("H", 1), [(0, "H", True), (1, "Hi", True)], ignore_order=True))
+    assert(not DeepDiff(trie.edit_distance("z", 1), [(1, "H", True)], ignore_order=True))
+    assert(not DeepDiff(trie.edit_distance("H", 2), [(0, "H", True), (1, "Hi", True), (2, "Hey", True)], ignore_order=True))
+    assert(not DeepDiff(trie.edit_distance("H", 3), [(0, "H", True), (1, "Hi", True), (2, "Hey", True)], ignore_order=True))
+    assert(not DeepDiff(trie.edit_distance("ey", 1), [(1, "Hey", True)], ignore_order=True))
+    assert(not DeepDiff(trie.edit_distance("ey", 2), [(2, "H", True), (2, "Hi", True), (1, "Hey", True)], ignore_order=True))
+
+def _get_hash_distance(words, word, max_distance):
+    return [(distance(word, w), w, True) for w in words if distance(word, w) <= max_distance]
 
 def test_get_longest_prefixes_index():
     words = ["Hello", "Hi"]

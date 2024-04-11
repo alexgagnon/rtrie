@@ -475,10 +475,11 @@ class Trie(MutableMapping[str, Attributes]):
 
     def starts_with(self, prefix: str) -> Iterator[str]:
         """
-        Returns a generator consisting of all nodes beneath the nearest node matching `prefix`.
+        Returns a generator consisting of all nodes that are longer than the nearest node matching `prefix`.
         """
         path, label = self._get_node(prefix)
         node = path.pop()[0] if len(path) > 0 else None
+        print(node, label)
         if node == None:
             return self.root.items()
         else:
@@ -499,43 +500,78 @@ class Trie(MutableMapping[str, Attributes]):
                     prefixes.append((prefix, child.attributes))
         return prefixes
     
-    def search(self, word, type: Literal['fuzzy', 'edit'] = 'edit', threshold: int | float = 0) -> Candidates:
+    def similar_to(self, word, type = 'ratio', max_distance = None, threshold = None):
+        if type == 'ratio':
+            pass
+        elif type == 'distance':
+            if max_distance == None:
+                raise ValueError("max_distance must be provided when type is 'distance'")
+            self.edit_distance(word, max_distance)
 
-        # Pruning phase
+    def edit_distance(self, word: str, max_distance: int) -> Candidates:
+        """
+        Returns a list of words with an edit distance of at most `max_distance` from `word`.
+
+        NOTE: this is a somewhat naive approach. We still get to skip a lot of nodes, but
+        for the ones that are within the range of len(word) +- max_distance, we are computing 
+        the distance for each word. 
+        We could perhaps do a running distance approach and/or memoize the values we've already 
+        computed to speed this up (see commented out below for a nearly working example)
+        """
+        word_length = len(word)
+        queue = deque([("", self.root)])
         candidates = []
-        offset = 0
-        distance = 0
+        
+        while queue:
+            prefix, child = queue.popleft()
+            print(prefix, child)
+            if len(prefix) > word_length + max_distance:
+                debug('too long, done')
+                continue
+            elif len(prefix) < word_length - max_distance:
+                debug('too short, next')
+            else:
+                if child.is_word():
+                    debug(f'Checking word: {prefix}')
+                    d = distance(word, prefix)
+                    if d <= max_distance:
+                        debug(f'Adding word: {prefix}, Distance: {d}')
+                        candidates.append((d, prefix, child.attributes))
 
-        if type == 'edit':
-          self._search_edit_recursive(self.root, word, "", offset, distance, int(threshold), candidates)
-        else:
-          self._search_fuzzy_recursive(self.root, word, "", offset, distance, threshold, candidates)
+            for k, c in child.children.items() if child.children != None else {}:
+                queue.append((prefix + k, c))
 
         return candidates
 
-    def _search_edit_recursive(self, node: AttributeNode, word: str, prefix: str, offset: int, current_distance: int, max_distance: int, candidates: Candidates) -> Candidates:
-        if node == None or node.children == None:
-            return
+    # def edit_distance(self, word: str, max_distance: int) -> Candidates:
+    #     """
+    #     Returns a list of words with an edit distance of at most `max_distance` from `word`.
+    #     """
+    #     nodes = []
+    #     self._edit_distance_recursive(self.root, word, "", max_distance, 0, 0, nodes)
+    #     return nodes
+    
+    # def _edit_distance_recursive(self, node, word, prefix, max_distance, total_distance, length, candidates):
+    #     word_length = len(word)
+    #     print(total_distance, max_distance, node.children.keys() if node.children != None else {})
+    #     for key, child in node.children.items() if node.children != None else {}:
+    #         key_length = len(key)
+    #         p = word[:key_length]
+    #         s = word[key_length:]
+    #         d = total_distance + distance(p, key)
+    #         l = length + key_length
+    #         print(f'Word: {word}, Prefix: {p}, Key: {key}, Distance: {d}, Length: {l}')
 
-        for child in node.children:
-            # TODO: need to account for if fragment is smaller than child or vice versa
-            new_offset = offset + len(child)
-            fragment = word[offset:max(len(child), len(word) - offset)]
-            d = distance(fragment, child)
-            total = d + current_distance
-            debug(f"Distance b/w {child} and {fragment}: {d}")
-            debug(f"{current_distance} + {d} = {total}")
-            
-            if total <= max_distance:
-                child_node = node.children[child]
-                new_prefix = f"{prefix}{child}"
-                if child_node.attributes != None:
-                    # compute distance to the remainder of the word
-                    total_distance = len(word) - len(new_prefix) + d
-                    debug(f"{word}, {new_prefix}, {total_distance}")
-                    if total_distance <= max_distance:
-                        candidates.append((total_distance, new_prefix, child_node))
-                self._search_edit_recursive(child_node, word, new_prefix, new_offset, total, max_distance, candidates)
+    #         # need to handle both when we can directly compare the word and key, and when we need
+    #         # to check deeper in the trie for deletions/swaps
+    #         if total_distance <= max_distance:
+    #             if child.is_word() and max_distance >= d + len(s):
+    #                 candidates.append((d, prefix + key, child.attributes))
+    #             self._edit_distance_recursive(child, s, prefix + key, max_distance, d, l, candidates)
+
+    #         # check deeper nodes without consuming the word
+    #         if l <= max_distance:
+    #             self._edit_distance_recursive(child, word, prefix + key, max_distance, d, l, candidates)
 
     def _search_fuzzy_recursive(self, node: AttributeNode, word: str, prefix: str, offset: int, current_distance: int, threshold: float, candidates: Candidates) -> Candidates:
         if node == None or node.children == None or len(node.children) == 0:

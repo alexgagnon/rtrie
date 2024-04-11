@@ -14,7 +14,7 @@ argparse = "^1.4.0"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^7.4.0"
-deepdiff = "^6.3.0"
+deepdiff = "^7.0.1"
 
 [tool.poetry.group.dev.dependencies]
 bumpver = "^2023.1124"

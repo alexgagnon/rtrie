@@ -12,10 +12,15 @@ from pympler import asizeof
 level = logging.DEBUG if os.environ.get("DEBUG") == "True" else logging.INFO
 logging.basicConfig(level = level)
 
-words = ['mac', 'mama', 'mother', 'there']
-trie = Trie(words=iter(words), node_type=AttributeNode)
-# print(trie.prefixes_of('mother'))
-print(trie.prefixes_of('therein'))
+# words = ['mac', 'mama', 'mother', 'there']
+# trie = Trie(words=iter(words), node_type=AttributeNode)
+# # print(trie.prefixes_of('mother'))
+# # print(trie.prefixes_of('therein'))
+# print(trie.edit_distance('moth', 2))
+
+words = ["Hey", "H", "There", "Hello", "Hi"]
+trie = Trie(words = iter(sorted(words)))
+print(list(trie.starts_with("There")))
 
 # with open('data/sample.tsv') as f:
     # entries = [tuple(word.strip().split("\t")) for word in f]
