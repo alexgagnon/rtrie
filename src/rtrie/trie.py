@@ -428,11 +428,11 @@ class Trie(MutableMapping[str, Attributes]):
         info(f"Finished adding words at depth {depth}")  
 
 
-    def words(self, sort=False) -> Iterator[str]:
+    def words(self, sort = False) -> Iterator[str]:
         """
         Returns all nodes that are words
         """
-        for prefix, node in self.nodes(sort):
+        for prefix, node in self.nodes(sort = sort):
             if (node.attributes != None):
                 yield prefix
 
@@ -440,7 +440,7 @@ class Trie(MutableMapping[str, Attributes]):
         """
         BF traversal of the Trie, optionally in sorted order
         """
-        return self.root.nodes(sort)
+        return self.root.nodes(sort = sort)
 
     def _get_node(self, word: str) -> GetNode:
         """
@@ -477,13 +477,17 @@ class Trie(MutableMapping[str, Attributes]):
         """
         Returns a generator consisting of all nodes that are longer than the nearest node matching `prefix`.
         """
+        if prefix == "":
+            return self.root.items()
         path, label = self._get_node(prefix)
         node = path.pop()[0] if len(path) > 0 else None
-        print(node, label)
         if node == None:
-            return self.root.items()
+            return chain(*[child.items(prefix = key, include_root = True) for key, child in self.root.children.items() if key.startswith(prefix)])
+                
         else:
-            return node.items(label)
+            return node.items(prefix = label, include_root = True)
+        
+        return []
         
     def prefixes_of(self, string: str) -> str:
         """
@@ -524,7 +528,6 @@ class Trie(MutableMapping[str, Attributes]):
         
         while queue:
             prefix, child = queue.popleft()
-            print(prefix, child)
             if len(prefix) > word_length + max_distance:
                 debug('too long, done')
                 continue

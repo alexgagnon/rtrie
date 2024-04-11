@@ -65,8 +65,10 @@ class AttributeNode(Node):
         """
         BFS through child nodes. If sort is True, then sort the children in reverse order. If a prefix is provided,
         prepend it to each yielded key.
+
+        TODO: investigate if it's faster to just have the consumer sort after the fact instead of sorting here.
         """
-        stack: deque[Entry] = deque()
+        stack: deque[Entry] = deque([("", self)] if include_root else [])
         if self.children != None:
             items = self.children.items()
             if sort:
@@ -86,8 +88,12 @@ class AttributeNode(Node):
                 for key, value in items:
                     stack.append((p + key, value))
    
-    def items(self, prefix: str = ""):
-        for p, node in self.nodes(prefix = prefix):
+    def items(self, include_root = False, prefix: str = ""):
+        """
+        Returns a generator that yields each word. Providing a prefix will prepend it to each word,
+        and include_root will include the root node in the results if it's a word
+        """
+        for p, node in self.nodes(include_root = include_root, prefix = prefix):
             if (node.attributes != None):
                 yield (p, node.attributes)
 

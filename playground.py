@@ -20,7 +20,7 @@ logging.basicConfig(level = level)
 
 words = ["Hey", "H", "There", "Hello", "Hi"]
 trie = Trie(words = iter(sorted(words)))
-print(list(trie.starts_with("There")))
+print(list(trie.starts_with("")))
 
 # with open('data/sample.tsv') as f:
     # entries = [tuple(word.strip().split("\t")) for word in f]
