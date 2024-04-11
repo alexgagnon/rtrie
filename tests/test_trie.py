@@ -185,7 +185,8 @@ def test_starts_with():
     assert(not DeepDiff(list(trie.starts_with("There")), [("There", True)], ignore_order=True))
     assert(not DeepDiff(list(trie.starts_with("Th")), [("There", True)], ignore_order=True))
     assert(not DeepDiff(list(trie.starts_with("T")), [("There", True)], ignore_order=True))
-
+    assert(not DeepDiff(list(trie.starts_with("")), [("Hey", True), ("There", True), ("Hello", True), ("Hi", True)], ignore_order=True))
+    
 def test_prefixes_of():
     words = ["Hey", "H", "There", "Hello", "Hi"]
     trie = Trie(words = iter(sorted(words)))

@@ -12,7 +12,8 @@ class StoredTrie(Trie):
     """
       A trie that stores subtrees in files. A special sentinel node is used to indicate that a subtree is stored in a given file.
       NOTE: there is a large trade-off between memory and speed. If you store subtrees in files, you will have to load them from disk,
-      and the depth you define how many files you will have (low depth = fewer, larger files, high depth = more, smaller files)
+      and the depth you define how many files you will have (low depth = fewer, larger files, high depth = more, smaller files).
+      Could potentially speed this up by using mmap?
     """
     depth_to_store: Optional[int]
     subtrie_path: str

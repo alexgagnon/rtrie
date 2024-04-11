@@ -10,9 +10,8 @@ from rapidfuzz.fuzz import ratio
 from rapidfuzz.distance.DamerauLevenshtein import distance
 from typing import ItemsView, Iterator, Literal, Optional, cast
 
-from src.rtrie.node import GetNode
 from .types import Attributes, Record, Word, Words
-from .node import AttributeNode, Candidates, Children, Entry, Node, StringAttributeNode
+from .node import AttributeNode, Candidates, Children, Node
 
 log_level = os.environ.get('LOG_LEVEL') if os.environ.get('LOG_LEVEL') != None else 'ERROR'
 logging.basicConfig(level=logging.getLevelName(log_level), format='%(message)s')
@@ -442,7 +441,7 @@ class Trie(MutableMapping[str, Attributes]):
         """
         return self.root.nodes(sort = sort)
 
-    def _get_node(self, word: str) -> GetNode:
+    def _get_node(self, word: str) -> list[tuple[Node, str]]:
         """
         Returns the stack of Node/key pairs that leads to a node with a potentially matching label.
         The top of the stack will either be a match or the closest node that matches the prefix.
