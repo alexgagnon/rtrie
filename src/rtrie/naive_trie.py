@@ -2,11 +2,12 @@ from typing import cast
 import sys
 
 class NaiveTrie:
-    def __init__(self, words):
+    def __init__(self, words = None):
         self.root = Node()
         self.num_words: int = 0
-        for word in words:
-            self.add(word)
+        if words != None:
+            for word in words:
+                self.add(word)
     
     def __contains__(self, word):
         return self.search(word)
