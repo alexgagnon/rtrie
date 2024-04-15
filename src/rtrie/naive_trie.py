@@ -1,16 +1,41 @@
-from typing import cast
 import sys
 
 class NaiveTrie:
+    # __slots__ = ('root',)
+
     def __init__(self, words = None):
         self.root = Node()
-        self.num_words: int = 0
         if words != None:
             for word in words:
                 self.add(word)
     
+    def items(self):
+        stack = [(self.root, '')]
+
+        while stack:
+            current, prefix = stack.pop()
+            if current.attributes != None:
+                yield (prefix + key, current.attributes)
+            if current.children != None:
+                for key, child in current.children.items():
+                    stack.append((child, prefix + key))
+
+        
+    def __len__(self):
+        return len(list(self.items()))
+    
     def __contains__(self, word):
         return self.search(word)
+    
+    def _get_node(self, word: str):
+        current = self.root
+        for letter in word:
+            if current.children == None:
+                return None
+            if letter not in current.children:
+                return None
+            current = current.children[letter]
+        return (current, word)
     
     def __getitem__(self, word: str):
         result = self._get_node(word)
@@ -23,7 +48,7 @@ class NaiveTrie:
         if result != None:
             result[0][1].attributes = attributes
 
-    def __str__(self):
+    def __repr__(self):
         return self.root.print(0)
 
     def __contains__(self, word: object) -> bool:
@@ -33,26 +58,40 @@ class NaiveTrie:
             self.root = self.root.children[letter]
         return True
     
-    def add(self, word):
+    def remove(self, word):
         current = self.root
-        for i, letter in enumerate(word):
+        prev = None
+        prev_key = None
+        for letter in word:
+            if current.children == None:
+                return
+            if letter not in current.children:
+                return
+            prev = current
+            prev_key = letter
+            current = current.children[letter]
+        if current.children != None:
+            del prev.children[prev_key]
+        else:
+            current.attributes = None
+        
+    def add(self, word, attributes = True):
+        current = self.root
+        for letter in word:
             letter = sys.intern(letter)
             if current.children == None:
                 current.children = {}
             if letter not in current.children:
                 current.children[letter] = Node()
             current = current.children[letter]
-        current.attributes = True
+        current.attributes = attributes
     
 class Node():
-    __slots__ = ('attributes', 'children')
+    # __slots__ = ('attributes', 'children')
 
     def __init__(self, attributes = None, children = None, *args, **kwargs):
         self.attributes = attributes
         self.children = children
-
-    def __str__(self):
-        return self
 
     def print(self, depth: int):
         if self.children == None:

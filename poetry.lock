@@ -151,6 +151,21 @@ files = [
 ]
 
 [[package]]
+name = "objsize"
+version = "0.7.0"
+description = "Traversal over Python's objects subtree and calculate the total size of the subtree in bytes (deep size)."
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "objsize-0.7.0-py3-none-any.whl", hash = "sha256:a8b03ce87477c649a99e6b1920f4eeb8b9ba3f8bc2a94d0e5c06ef68adc334a7"},
+    {file = "objsize-0.7.0.tar.gz", hash = "sha256:d66bbb2a4341803caba84894b5753f9b065ebe1cbf50fd186ae438dfc1ca4729"},
+]
+
+[package.extras]
+dev = ["black", "bumpver", "coveralls", "flake8", "isort", "mypy", "pip-tools", "pylint", "pytest", "pytest-cov", "pyyaml"]
+docs = ["myst-parser", "sphinx", "sphinx-markdown-builder (>=0.6.0)", "sphinx-rtd-dark-mode", "sphinx-rtd-theme"]
+
+[[package]]
 name = "ordered-set"
 version = "4.1.0"
 description = "An OrderedSet is a custom MutableSet that remembers its order, so that every"
@@ -464,4 +479,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "a49aa6a2c00c72fd16dcf7e89dc319ab4c100d9027b3fde5c0d4152f9c421310"
+content-hash = "cbf47681683117e855c785133d4d40938b097677eb84eacf551aa6c92407f9d5"

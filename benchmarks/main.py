@@ -1,14 +1,18 @@
 from collections import defaultdict
+import json
 import os
+import sys
 import pandas as pd
 from pickle import dump, load
 from pympler import asizeof
 import random
+from rapidfuzz.distance.DamerauLevenshtein import distance
 from rtrie import Trie
 from rtrie.node import AttributeNode, StringAttributeNode
 from rtrie.naive_trie import NaiveTrie
 from sortedcontainers import SortedDict, SortedSet
 import time
+from objsize import get_deep_size
 
 sample_dir = 'data'
 
@@ -17,220 +21,458 @@ SAVE=True
 random.seed(42)
 pd.set_option('display.float_format', lambda x: '%.8f' % x)
 
-def sample_from_file(file, n, condition=lambda x: True, num_lines=None):
+def get_all_prefixes(words, prefix):
+    start_index = find_prefix_start(words, prefix)
+    if start_index == -1:
+        return []  # No prefix found
+
+    # Collect all matching prefixes
+    prefixes = []
+    i = start_index
+    while i < len(words) and words[i].startswith(prefix):
+        prefixes.append(words[i])
+        i += 1
+    
+    return prefixes
+
+def get_all_startswith(words, prefix):
+    start_index = find_prefix_start(words, prefix)
+    if start_index == -1:
+        return []  # No prefix found
+
+    # Collect all matching prefixes
+    prefixes = []
+    i = start_index
+    while i < len(words) and prefix.startswith(words[i]):
+        prefixes.append(prefix)
+        i += 1
+    
+    return prefixes
+
+def find_prefix_start(words, prefix):
+    low, high = 0, len(words) - 1
+    while low <= high:
+        mid = (low + high) // 2
+        # Check if the current word starts with the prefix
+        if words[mid].startswith(prefix):
+            # If it's not the first element and the previous one also matches, search left
+            if mid > 0 and words[mid - 1].startswith(prefix):
+                high = mid - 1
+            else:
+                return mid
+        elif words[mid] < prefix:
+            low = mid + 1
+        else:
+            high = mid - 1
+    return -1  # If no match is found
+
+def find_near_words(sorted_words, target, max_dist):
+    n = len(sorted_words)
+    left = 0
+    right = n - 1
+    
+    # Binary search to find the closest index
+    while left <= right:
+        mid = (left + right) // 2
+        if sorted_words[mid] < target:
+            left = mid + 1
+        else:
+            right = mid - 1
+    
+    # Expand outwards from the nearest point found
+    closest_words = []
+    i, j = right, right + 1
+    while i >= 0 or j < n:
+        if i >= 0:
+            dist = distance(sorted_words[i], target)
+            if dist <= max_dist:
+                closest_words.append(sorted_words[i])
+            i -= 1
+        if j < n:
+            dist = distance(sorted_words[j], target)
+            if dist <= max_dist:
+                closest_words.append(sorted_words[j])
+            j += 1
+
+    return closest_words
+
+def sample_from_file(file, n, num_lines=None):
     """
-    Sample n lines from a file, with a condition to filter lines.
-    Works for both sorted and unsorted files.
+    Generates a random sample of n lines from a file
     """
-    samples = set()
+    samples = {}
+
     if num_lines is None:
         num_lines = sum(1 for line in open(file))
 
+    chance = n / num_lines
+
     with open(file) as f:
-        for i, line in enumerate(f):
-            if random.random() < n / num_lines and condition(line):
-                samples.add(line)
-            if len(samples) == n:
-                break
-            
-    return samples
-    entries = [tuple(word.strip().split('\t')) for word in samples]
-    words = [w[0] for w in entries]
+        while True:
+            for line in f:
+                if random.random() < chance:
+                    label, id = line.strip().split('\t')
+                    if label not in samples:
+                        samples[label] = id
+                    if len(samples) == n:
+                        return samples
+                    
+            f.seek(0)
 
+def bench_lexicon(type, words, length, test_words):
     results = {}
 
-    start = time.time()
-    hash_set = set(words)
-    data_structures.append('hash_set')
-    times.append(time.time() - start)
-    sizes.append(asizeof.asizeof(hash_set))
-    if SAVE:
-      dump(hash_set, open(f'data/hash_set_{size}.pkl', 'wb'))
-    del hash_set
-
-    start = time.time()
-    hash_map = {word: id for word, id in entries}
-    data_structures.append('hash_map')
-    times.append(time.time() - start)
-    sizes.append(asizeof.asizeof(hash_map))
-    if SAVE:
-      dump(hash_map, open(f'data/hash_map_{size}.pkl', 'wb'))
-    del hash_map
-
-    start = time.time()
-    sorted_set = SortedSet(words)
-    data_structures.append('sorted_set')
-    times.append(time.time() - start)
-    sizes.append(asizeof.asizeof(sorted_set))
-    if SAVE:
-      dump(sorted_set, open(f'data/sorted_set_{size}.pkl', 'wb'))
-    del sorted_set
-
-    start = time.time()
-    sorted_dict = SortedDict({word: id for word, id in entries})
-    data_structures.append('sorted_dict')
-    times.append(time.time() - start)
-    sizes.append(asizeof.asizeof(sorted_dict))
-    if SAVE:
-      dump(sorted_dict, open(f'data/sorted_dict_{size}.pkl', 'wb'))
-    del sorted_dict
-
-    start = time.time()
-    trie = Trie(words = iter(words))
-    data_structures.append('trie')
-    times.append(time.time() - start)
-    sizes.append(asizeof.asizeof(trie))
-    if SAVE:
-      dump(trie, open(f'data/trie_{size}.pkl', 'wb'))
-    del trie
-
-    start = time.time()
-    naive_trie = NaiveTrie(words = words)
-    data_structures.append('naive_trie')
-    times.append(time.time() - start)
-    sizes.append(asizeof.asizeof(naive_trie))
-    if SAVE:
-      dump(naive_trie, open(f'data/naive_trie_{size}.pkl', 'wb'))
-    del naive_trie
-
-def bench(type, words, node_type = AttributeNode):
-    results = {}
-
-    if type == 'hash_set':
+    if type == 'set':
         structure = set()
     elif type == 'sorted_set':
         structure = SortedSet()
-    elif type == 'hash_map':
-        structure = {}
-    elif type == 'sorted_dict':
-        structure = SortedDict()
-    elif type == 'trie':
-        structure = Trie(node_type = node_type)
-    elif type == 'naive_trie':
-        structure = NaiveTrie()
+    elif type.startswith('rtrie'):
+        structure = Trie(node_type = AttributeNode)
+    else:
+        raise ValueError(f"Invalid type: {type}")
 
-    # build, only Trie has optimization, the rest just iterate over insert
-    if type == 'trie':
+    # build/insert
+    if type.startswith('rtrie'):
         start = time.time()
-        sorted_words = iter(sorted(words))
+        sorted_words = iter(sorted(words, key=lambda x: x))
         print(f"Time to sort: {time.time() - start}")
 
         start = time.time()
         structure.add_words(sorted_words)
-        results['build'] = (time.time() - start)
-        del structure
-        structure = Trie(node_type = node_type)
-        
-    # insert
-    start = time.time()
-    for word in words:
-        structure.add(word)
-    results['insert'] = (time.time() - start)
-    
-    if type != 'trie':
-        results['build'] = results['insert']
+        results['insert'] = (time.time() - start)
+        assert(length == len(structure))
+    else:
+        start = time.time()
+        for word in words:
+            structure.add(word)
+        results['insert'] = (time.time() - start)
+        assert(length == len(structure))
 
     # size
     results['size'] = asizeof.asizeof(structure)
 
     # contains
     start = time.time()
-    for word in words:
+    for word in test_words:
         word in structure
     results['contains'] = (time.time() - start)
 
+    # prefixes of
+    if type.startswith('rtrie'):
+        start = time.time()
+        for word in test_words:
+            structure.prefixes_of(word)
+        results['prefixes_of'] = (time.time() - start)
+    elif type == 'set':
+        start = time.time()
+        for word in test_words:
+            [w for w in structure if word.startswith(w)]
+        results['prefixes_of'] = (time.time() - start)
+    else:
+        start = time.time()
+        for word in test_words:
+            get_all_prefixes(structure, word)
+        results['prefixes_of'] = (time.time() - start)
+
+    # starts with
+    if type.startswith('rtrie'):
+        start = time.time()
+        for word in test_words:
+            structure.starts_with(word)
+        results['starts_with'] = (time.time() - start)
+    elif type == 'set':
+        start = time.time()
+        for word in test_words:
+            [w for w in structure if w.startswith(word)]
+        results['starts_with'] = (time.time() - start)
+    else:
+        start = time.time()
+        for word in test_words:
+            get_all_startswith(structure, word)
+        results['starts_with'] = (time.time() - start)
+
+    # edit distance
+    if type.startswith('rtrie'):
+        start = time.time()
+        for word in test_words:
+            structure.similar_to(word, 'distance', 2)
+        results['edit_distance'] = (time.time() - start)
+    elif type == 'set':
+        start = time.time()
+        for word in test_words:
+            [w for w in structure if distance(word, w) <= 2]
+        results['edit_distance'] = (time.time() - start)
+    else:
+        start = time.time()
+        for word in test_words:
+            find_near_words(structure, word, 2)
+        results['edit_distance'] = (time.time() - start)
+
     # remove
     start = time.time()
-    for word in words:
+    for word in test_words:
         structure.remove(word)
     results['delete'] = (time.time() - start)
-      
+    assert(len(structure) == length - len(test_words))
+
     del structure
 
     return results
-    times = {}
-
-    if type == 'hash_map':
+    
+def bench_dict(type, entries, length, test_words):
+    results = {}
+    
+    if type == 'dict':
         structure = {}
     elif type == 'sorted_dict':
         structure = SortedDict()
-    elif type == 'trie':
-        structure = Trie()
-    elif type == 'naive_trie':
-        structure = NaiveTrie()
+    elif type.startswith('rtrie'):
+        structure = Trie(node_type = AttributeNode)
+    else:
+        raise ValueError(f"Invalid type: {type}")
 
-    # build
-    start = time.time()
-    for word in words:
-        structure[word] = 1
-        
-    # insert
-    start = time.time()
-    for word in words:
-        structure.add(word)
-    times['insert'] = (time.time() - start)
+    # build/insert
+    if type.startswith('rtrie'):
+        start = time.time()
+        sorted_entries = iter(sorted(entries, key=lambda x: x[0]))
+        print(f"Time to sort: {time.time() - start}")
+
+        start = time.time()
+        structure.add_words(sorted_entries)
+        results['insert'] = (time.time() - start)
+        # assert(length == len(structure))
+    else:
+        start = time.time()
+        for word, attributes in entries.items():
+            structure[word] = attributes
+        results['insert'] = (time.time() - start)
+        assert(length == len(structure))
 
     # size
-    size = asizeof.asizeof(structure)
+    results['size'] = asizeof.asizeof(structure)
 
     # contains
     start = time.time()
-    for word in words:
+    for word in test_words:
         word in structure
-    times['contains'] = (time.time() - start)
+    results['contains'] = (time.time() - start)
+
+    # prefixes of
+    if type.startswith('rtrie'):
+        start = time.time()
+        for word in test_words:
+            structure.prefixes_of(word)
+        results['prefixes_of'] = (time.time() - start)
+    elif type == 'dict':
+        start = time.time()
+        for word in test_words:
+            [w for w in structure if w.startswith(word)]
+        results['prefixes_of'] = (time.time() - start)
+    else:
+        start = time.time()
+        for word in test_words:
+            get_all_prefixes(structure.keys(), word)
+        results['prefixes_of'] = (time.time() - start)
+
+    # starts with
+    if type.startswith('rtrie'):
+        start = time.time()
+        for word in test_words:
+            structure.starts_with(word)
+        results['starts_with'] = (time.time() - start)
+    elif type == 'dict':
+        start = time.time()
+        for word in test_words:
+            [w for w in structure if word.startswith(w)]
+        results['starts_with'] = (time.time() - start)
+    else:
+        start = time.time()
+        for word in test_words:
+            get_all_startswith(structure.keys(), word)
+        results['starts_with'] = (time.time() - start)
+
+    # edit distance
+    if type.startswith('rtrie'):
+        start = time.time()
+        for word in test_words:
+            structure.similar_to(word, 'distance', 2)
+        results['edit_distance'] = (time.time() - start)
+    elif type == 'dict':
+        start = time.time()
+        for word in test_words:
+            [w for w in structure if distance(word, w) <= 2]
+        results['edit_distance'] = (time.time() - start)
+    else:
+        start = time.time()
+        for word in test_words:
+            find_near_words(structure.keys(), word, 2)
+        results['edit_distance'] = (time.time() - start)
 
     # remove
     start = time.time()
-    for word in words:
+    for word in test_words:
         del structure[word]
-    times['delete'] = (time.time() - start)
+    results['delete'] = (time.time() - start)
+    print(length, len(structure), len(test_words))
+    # assert(len(structure) == length - len(test_words))
 
-    # if SAVE:
-    #   dump(structure, open(f'data/{structure}_{size}.pkl', 'wb'))
-      
     del structure
 
-structures = ['hash_set', 'sorted_set', 'hash_map', 'sorted_dict', 'trie', 'naive_trie']
-num_iterations = 2
-num_runs = 5
-sizes = [1]
-totals = defaultdict(list)
+    return results
 
-for i in range(num_iterations):
-    print(f"Iteration {i}")
-    for size in sizes:
-        samples = [sample.strip().split('\t') for sample in sample_from_file(f'{sample_dir}/latest-no-academic-papers-1.tsv', size, num_lines=61058021)]
-        
-        if size not in totals:
-            totals[size] = defaultdict(list)
-
-        runs = defaultdict(dict)
-        for structure in structures:
-            print(f"Running {structure} for {size} samples")
-            df = pd.DataFrame()
-            for j in range(num_runs):
-                words = ([w[0] for w in samples])
-                entries = (w for w in samples)
-                df = pd.concat([df, pd.DataFrame(bench(structure, words), index=[j])])
-
-            totals[size][structure].append({'mean': df.mean(), 'std': df.std(), 'min': df.min(), 'max': df.max()})
 
 output_dir = 'benchmarks/results'
 os.makedirs(output_dir, exist_ok=True)
 
-results = defaultdict(list)
-for size in totals.keys():
-    for structure in totals[size].keys():
-          
-        if size not in results:
-            results[size] = {}
+def get_stats(words):
+    stats = {}
+    stats['max'] = max(len(word) for word in words)
+    stats['min'] = min(len(word) for word in words)
+    stats['mean'] = sum(len(word) for word in words) / len(words)
+    stats['num_non_ascii'] = sum(1 for word in words if not word.isascii())
+    return stats
 
-        print(f"Results for {structure} with {size} samples")
-        dfs = [pd.DataFrame(result) for result in totals[size][structure]]
-        totals[size][structure] = pd.concat(dfs, keys=range(num_iterations)).groupby(level=1).mean()
-        with open(f'{output_dir}/{structure}_{size}.csv', 'w') as f:
-            f.write(pd.DataFrame(totals[size][structure]).to_csv())
+def t():
+    num_iterations = 5
+    num_runs = 5
+    sizes = [10, 100, 1000, 10000, 100000, 1000000]
 
+    for size in sizes:
+        totals = defaultdict(list)
+        output = {}
+        for i in range(num_iterations):
+            print(f"Size: {size}, Iteration {i}")
+            sample_path = f'{sample_dir}/latest-no-academic-papers-10_000_000.tsv'
+            
+            samples = sample_from_file(sample_path, size, num_lines=10000000)
+            length = len(samples.keys())
+            assert(length == size)
 
+            output['stats'] = get_stats(samples.keys())
+            test_words = random.sample(sorted(samples.keys()), 5)
+            output['test_words'] = test_words
 
+            for structure in ['set', 'sorted_set', 'rtrie_lexicon']:
+                print(f"Running {structure} for {size} samples")
+                df = pd.DataFrame()
+                for j in range(num_runs):
+                    df = pd.concat([df, pd.DataFrame(bench_lexicon(structure, samples.keys(), length, test_words), index=[j])])
+
+                totals[structure].append({'mean': df.mean(), 'std': df.std(), 'min': df.min(), 'max': df.max()})
+
+            for structure in ['dict', 'sorted_dict', 'rtrie']:
+                print(f"Running {structure} for {size} samples")
+                df = pd.DataFrame()
+                for j in range(num_runs):
+                    df = pd.concat([df, pd.DataFrame(bench_dict(structure, samples, length, test_words), index=[j])])
+
+                totals[structure].append({'mean': df.mean(), 'std': df.std(), 'min': df.min(), 'max': df.max()})
+
+        for structure in totals.keys():
+            dfs = [pd.DataFrame(t) for t in totals[structure]]
+            totals[structure] = pd.concat(dfs, keys=range(num_iterations)).groupby(level=1).mean().to_dict()
+
+        output['results'] = totals
+        with open(f'{output_dir}/results-{size}.json', 'w') as f:
+            f.write(json.dumps(output, indent=2))
+
+def total_size(obj, seen=None):
+    """Calculate total memory usage of an object in an iterative way, handling __slots__."""
+    if seen is None:
+        seen = set()  # To track already visited objects and avoid double counting
+
+    # Stack to hold the objects to be processed
+    stack = [obj]
+    total = 0
+
+    while stack:
+        obj = stack.pop()
+        obj_id = id(obj)
+
+        print(obj_id)
+
+        if obj_id in seen:
+            continue
+
+        seen.add(obj_id)
+
+        total += sys.getsizeof(obj)
+
+        print(total)
+        print(obj)
+        print(obj.__class__.__name__)
+
+        # Explore __slots__ if available
+        if hasattr(obj, '__slots__'):
+            print('has slots')
+            print(getattr(obj, '__slots__'))
+            for slot in getattr(obj, '__slots__', []):
+                try:
+                    print(slot)
+                    attr = getattr(obj, slot)
+                    if isinstance(attr, (dict, list, set, tuple, frozenset)):
+                        stack.extend(attr)
+                    else:
+                        stack.append(attr)
+                except AttributeError:
+                    # Attribute in __slots__ may not be initialized yet
+                    continue
+                
+        # Also, explore __dict__ if available
+        elif hasattr(obj, '__dict__'):
+            print('has dict')
+            total += sys.getsizeof(obj.__dict__)
+            for key, value in obj.__dict__.items():
+                stack.append(value)
+
+    return total
+
+def space():
+    sizes = [1, 10]
+    type = 'slots'
+    trie_sizes_pympler = []
+    trie_sizes_get_deep_size = []
+    # trie_sizes_custom_getsizeof = []
+    naive_trie_sizes_pympler = []
+    naive_trie_sizes_get_deep_size = []
+    # naive_trie_sizes_custom_getsizeof = []
+
+    output = defaultdict(dict)
+    for size in sizes:
+        print(f"Size: {size}")
+        samples = sample_from_file(f'{sample_dir}/latest-no-academic-papers-10_000_000.tsv', size, num_lines=10000000)
+        length = len(samples.keys())
+        assert(length == size)
+        output[size]['stats'] = get_stats(samples.keys())
+
+        trie = Trie(words = (word for word in sorted(samples.keys())))
+        assert(len(trie) == size)
+        trie_sizes_pympler.append(asizeof.asizeof(trie))
+        trie_sizes_get_deep_size.append(get_deep_size(trie))
+        # trie_sizes_custom_getsizeof.append(total_size(trie))
+
+        del trie
+
+        naive_trie = NaiveTrie(words = samples.keys())
+        assert(len(naive_trie) == size)
+        naive_trie_sizes_pympler.append(asizeof.asizeof(naive_trie))
+        naive_trie_sizes_get_deep_size.append(get_deep_size(naive_trie))
+        # naive_trie_sizes_custom_getsizeof.append(total_size(naive_trie))
+
+        del naive_trie
         
+    df = pd.DataFrame({
+        'rtrie-pympler': trie_sizes_pympler, 
+        'rtrie-objsize': trie_sizes_get_deep_size, 
+        # 'rtrie-custom': trie_sizes_custom_getsizeof,
+        'trie': naive_trie_sizes_pympler,
+        'trie-objsize': naive_trie_sizes_get_deep_size,
+        # 'trie-custom': naive_trie_sizes_custom_getsizeof
+    }, index=sizes)
+    output['results'] = df.to_dict()
+    with open(f'benchmarks/results/space-{type}.json', 'w') as f:
+        f.write(json.dumps(output, indent=2))
+
+
+# space()
+t()

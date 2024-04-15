@@ -1,6 +1,7 @@
 import pytest
-from rtrie import AttributeNode, Trie, get_longest_prefix_index, get_longest_prefixes_index
+from rtrie import AttributeNode, StringAttributeNode, Trie, get_longest_prefix_index, get_longest_prefixes_index
 from deepdiff import DeepDiff
+import json
 from logging import info
 from rapidfuzz.distance.DamerauLevenshtein import distance
 
@@ -28,7 +29,38 @@ def test_trie():
 
     with pytest.raises(KeyError):
         trie['Nope']
-    
+
+def test_add_words_vs_iter_add_lexicon():
+    # AttributeNode
+    with open('data/samples_100.json') as f:
+        entries = [entry[0] for entry in json.load(f)]
+        print(entries)
+
+        trie_1 = Trie(words=iter(sorted(entries)), node_type=AttributeNode)
+        trie_2 = Trie(node_type=AttributeNode)
+        for entry in entries:
+            trie_2.add(entry)
+        
+        # NOTE: can't use str representation because the order of the keys traversed is not guaranteed
+        assert(DeepDiff(trie_1, trie_2) == {})
+        assert(len(trie_1) == len(trie_2))
+        assert(len(trie_1) == 100)
+
+def test_add_words_vs_iter_add_dictionary():
+    # StringAttributeNode
+    with open('data/samples_100.json') as f:
+        entries = [tuple(entry) for entry in json.load(f)]
+
+        trie_1 = Trie(words=iter(sorted(entries, key=lambda x: x[0])), node_type=StringAttributeNode)
+        trie_2 = Trie(node_type=StringAttributeNode)
+        for entry in entries:
+            trie_2.add(entry[0], entry[1])
+        
+        # NOTE: can't use str representation because the order of the keys traversed is not guaranteed
+        assert(DeepDiff(trie_1, trie_2) == {})
+        assert(len(trie_1) == len(trie_2))
+        assert(len(trie_1) == 100)
+
 def test_single_item():
     trie = Trie()
     trie.add("Hello")

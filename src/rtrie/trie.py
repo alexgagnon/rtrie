@@ -67,6 +67,9 @@ def _get_values(element: Word) -> Record:
         return ("null", -1)
 
 class Trie(MutableMapping[str, Attributes]):
+    # It appears we need to use slots here... for some reason it will always have
+    # slots even if it's not defined in the class, so without it doing memory
+    # profiling will fail
     __slots__ = ('root', 'num_words', 'node_factory')
 
     def __init__(self, 
@@ -94,7 +97,7 @@ class Trie(MutableMapping[str, Attributes]):
             self.add_words(words)
 
     def __delitem__(self, word: str):
-        return self.delete(word)
+        return self.remove(word)
 
     def __getitem__(self, word: str) -> Record | None:
         path, label = self._get_node(word)
@@ -132,6 +135,7 @@ class Trie(MutableMapping[str, Attributes]):
         NOTE: You should use `add_words` to initialize a Trie for performance reasons
         """
         current: AttributeNode = self.root
+        word = sys.intern(word)
 
         while True:
             debug(f'Adding "{word}"')
@@ -159,6 +163,7 @@ class Trie(MutableMapping[str, Attributes]):
                 match_found = False
                 debug("No exact match, checking remaining keys...")
                 for key in list(current.children.keys()):
+                    key = sys.intern(key)
                     index = get_longest_prefix_index(key, word)
                     debug(f"Prefix location: {index}")
 
@@ -170,8 +175,10 @@ class Trie(MutableMapping[str, Attributes]):
                     else:
                         match_found = True
                         prefix = word[:index]
+                        prefix = sys.intern(prefix)
                         word_suffix = word[index:]
                         key_suffix = key[index:]
+                        key_suffix = sys.intern(key_suffix)
 
                         debug(
                             f"\nPrefix: {prefix}\nWord remainder: {word_suffix}\nKey remainder: {key_suffix}")
@@ -188,7 +195,8 @@ class Trie(MutableMapping[str, Attributes]):
                             debug(
                                 f'Creating new node "{prefix}", is it a word: {is_word}')
                             current.children[prefix] = self.node_factory(None, Children())
-                            self.num_words += current.children[prefix].add_attributes(attributes if is_word else None)
+                            if is_word:
+                                self.num_words += current.children[prefix].add_attributes(attributes)
                             
                             # we know this is set to empty dict from above
                             current.children[prefix].children[key_suffix] = current.children[key] # type: ignore
@@ -206,7 +214,7 @@ class Trie(MutableMapping[str, Attributes]):
                     debug(
                         f'No overlapping prefixes in any key, adding "{word}" with `attributes` = {attributes}')
                     if current.children != None:
-                        word = sys.intern(word)   ## TODO: this is the meat and potatoes of mem-optimization
+                        word = sys.intern(word)
                         current.children[word] = self.node_factory()
                         self.num_words += current.children[word].add_attributes(attributes)
                     break
@@ -237,14 +245,15 @@ class Trie(MutableMapping[str, Attributes]):
                 if prev != None:
                     debug('Merging node with child')
                     debug(key + child_key)
-                    new_key = sys.intern(key + child_key)
+                    new_key = key + child_key
+                    new_key = sys.intern(new_key)
                     prev.children[new_key] = child_node
                     prev.children.pop(key)
 
         if prev != self.root:
             self._restructure(prev, parents)
 
-    def delete(self, word: str) -> bool:
+    def remove(self, word: str) -> bool:
         """
         Deletes a word from the Trie
         """
@@ -486,8 +495,6 @@ class Trie(MutableMapping[str, Attributes]):
         else:
             return node.items(prefix = label, include_root = True)
         
-        return []
-        
     def prefixes_of(self, string: str) -> str:
         """
         Returns all words that are a prefix of a given string.
@@ -505,7 +512,8 @@ class Trie(MutableMapping[str, Attributes]):
     
     def similar_to(self, word, type = 'ratio', max_distance = None, threshold = None):
         if type == 'ratio':
-            pass
+            if threshold == None:
+                raise ValueError("threshold must be provided when type is 'ratio'")
         elif type == 'distance':
             if max_distance == None:
                 raise ValueError("max_distance must be provided when type is 'distance'")

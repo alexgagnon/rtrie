@@ -14,31 +14,17 @@ from collections import deque
 from .types import Attributes
 from typing import Any, Optional, TypeAlias, TypedDict
 from abc import ABC
+import sys
 
 Entry: TypeAlias = tuple[str, 'Node']
 Children: TypeAlias = dict[str, 'Node']
 Candidates: TypeAlias = list[tuple[int, str, 'Node']]
 
-class GetNode():
-    __slots__ = ('node', 'parents', 'prefix', 'key')
-
-    node: 'Node'
-    parents: list['Node']
-    prefix: str
-    key: str
-
-    def __init__(self, node: 'Node', parents: list[tuple['Node', str]], prefix: str):
-        self.node = node
-        self.parents = parents
-        self.prefix = prefix
-
 class Node(ABC):
     """
       Base Node type
     """
-    __slots__ = ('children')
-
-    children: Optional[Children]
+    __slots__ = ('children',)
     
     def __init__(self, children):
         self.children = children
@@ -47,9 +33,7 @@ class AttributeNode(Node):
     """
       Node that supports attributes
     """
-    __slots__ = ('attributes')
-
-    attributes: Attributes
+    __slots__ = ('attributes',)
 
     def __init__(self, attributes: Attributes = None, children: Optional[Children] = None, *args, **kwargs):
         self.attributes = attributes
