@@ -1,7 +1,7 @@
 import sys
 
 class NaiveTrie:
-    # __slots__ = ('root',)
+    __slots__ = ('root',)
 
     def __init__(self, words = None):
         self.root = Node()
@@ -87,7 +87,7 @@ class NaiveTrie:
         current.attributes = attributes
     
 class Node():
-    # __slots__ = ('attributes', 'children')
+    __slots__ = ('attributes', 'children')
 
     def __init__(self, attributes = None, children = None, *args, **kwargs):
         self.attributes = attributes

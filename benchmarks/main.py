@@ -240,7 +240,6 @@ def bench_dict(type, entries, length, test_words):
         start = time.time()
         structure.add_words(sorted_entries)
         results['insert'] = (time.time() - start)
-        # assert(length == len(structure))
     else:
         start = time.time()
         for word, attributes in entries.items():
@@ -314,7 +313,6 @@ def bench_dict(type, entries, length, test_words):
         del structure[word]
     results['delete'] = (time.time() - start)
     print(length, len(structure), len(test_words))
-    # assert(len(structure) == length - len(test_words))
 
     del structure
 
@@ -428,51 +426,63 @@ def total_size(obj, seen=None):
     return total
 
 def space():
-    sizes = [1, 10]
-    type = 'slots'
-    trie_sizes_pympler = []
-    trie_sizes_get_deep_size = []
-    # trie_sizes_custom_getsizeof = []
-    naive_trie_sizes_pympler = []
-    naive_trie_sizes_get_deep_size = []
-    # naive_trie_sizes_custom_getsizeof = []
+    sizes = [10, 100, 1000, 10000, 100000, 1000000]
+    type = 'interning'
+    num_iterations = 5
 
-    output = defaultdict(dict)
+    output = {}
+
     for size in sizes:
-        print(f"Size: {size}")
-        samples = sample_from_file(f'{sample_dir}/latest-no-academic-papers-10_000_000.tsv', size, num_lines=10000000)
-        length = len(samples.keys())
-        assert(length == size)
-        output[size]['stats'] = get_stats(samples.keys())
+        output[size] = {
+            'stats': [],
+            'times': {
+                'rtrie': [],
+                'naive_trie': []
+            },
+            'sizes': {
+                'rtrie': [],
+                'naive_trie': []
+            },
+            'means': {}
+        }
 
-        trie = Trie(words = (word for word in sorted(samples.keys())))
-        assert(len(trie) == size)
-        trie_sizes_pympler.append(asizeof.asizeof(trie))
-        trie_sizes_get_deep_size.append(get_deep_size(trie))
-        # trie_sizes_custom_getsizeof.append(total_size(trie))
+        for i in range(num_iterations):
+            print(f"Size: {size}")
+            samples = sample_from_file(f'{sample_dir}/latest-no-academic-papers-10_000_000.tsv', size, num_lines=10000000)
+            length = len(samples.keys())
+            assert(length == size)
 
-        del trie
+            output[size]['stats'].append(get_stats(samples.keys()))
 
-        naive_trie = NaiveTrie(words = samples.keys())
-        assert(len(naive_trie) == size)
-        naive_trie_sizes_pympler.append(asizeof.asizeof(naive_trie))
-        naive_trie_sizes_get_deep_size.append(get_deep_size(naive_trie))
-        # naive_trie_sizes_custom_getsizeof.append(total_size(naive_trie))
+            start = time.time()
+            trie = Trie(words = (word for word in sorted(samples.keys())))
+            output[size]['times']['rtrie'].append(time.time() - start)
+            output[size]['sizes']['rtrie'].append(asizeof.asizeof(trie))
+            assert(len(trie) == size)
 
-        del naive_trie
-        
-    df = pd.DataFrame({
-        'rtrie-pympler': trie_sizes_pympler, 
-        'rtrie-objsize': trie_sizes_get_deep_size, 
-        # 'rtrie-custom': trie_sizes_custom_getsizeof,
-        'trie': naive_trie_sizes_pympler,
-        'trie-objsize': naive_trie_sizes_get_deep_size,
-        # 'trie-custom': naive_trie_sizes_custom_getsizeof
-    }, index=sizes)
-    output['results'] = df.to_dict()
-    with open(f'benchmarks/results/space-{type}.json', 'w') as f:
-        f.write(json.dumps(output, indent=2))
+            del trie
+
+            start = time.time()
+            naive_trie = NaiveTrie(words = samples.keys())
+            output[size]['times']['naive_trie'].append(time.time() - start)
+            output[size]['sizes']['naive_trie'].append(asizeof.asizeof(naive_trie))
+            assert(len(naive_trie) == size)
+
+            del naive_trie
+
+            output[size]['means']['times'] = {
+                'rtrie': sum(output[size]['times']['rtrie']) / num_iterations,
+                'naive_trie': sum(output[size]['times']['naive_trie']) / num_iterations
+            }
+
+            output[size]['means']['sizes'] = {
+                'rtrie': sum(output[size]['sizes']['rtrie']) / num_iterations,
+                'naive_trie': sum(output[size]['sizes']['naive_trie']) / num_iterations
+            }
+            
+        with open(f'benchmarks/results/space-{type}.json', 'w') as f:
+            f.write(json.dumps(output, indent=2))
 
 
-# space()
-t()
+space()
+# t()

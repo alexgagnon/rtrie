@@ -170,7 +170,7 @@ class StringAttributeNode(AttributeNode):
         return len(value.split(self.separator)) if value != None else 0
 
 class MaxLengthStringAttributeNode(MaxLengthNode, StringAttributeNode):
-    __slots__ = ('max_length')
+    __slots__ = ('max_length',)
 
     def __init__(self, attributes: Attributes = None, children: Optional[Children] = None, max_length: int = 0, *args, **kwargs):
         super().__init__(attributes=attributes, children=children, max_length=max_length, *args, **kwargs)
