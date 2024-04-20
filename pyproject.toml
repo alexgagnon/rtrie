@@ -5,7 +5,7 @@ description = ""
 authors = ["alexgagnon <alex@monad.media>"]
 readme = "README.md"
 license = "MIT"
-packages = [{include = "rtrie", from = "src"}]
+packages = [{include = "rtrie"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"

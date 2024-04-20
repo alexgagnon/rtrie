@@ -32,8 +32,8 @@ def test_trie():
 
 def test_add_words_vs_iter_add_lexicon():
     # AttributeNode
-    with open('data/samples_100.json') as f:
-        entries = [entry[0] for entry in json.load(f)]
+    with open('examples/100.tsv') as f:
+        entries = [entry.strip().split('\t')[0] for entry in f]
         print(entries)
 
         trie_1 = Trie(words=iter(sorted(entries)), node_type=AttributeNode)
@@ -48,8 +48,8 @@ def test_add_words_vs_iter_add_lexicon():
 
 def test_add_words_vs_iter_add_dictionary():
     # StringAttributeNode
-    with open('data/samples_100.json') as f:
-        entries = [tuple(entry) for entry in json.load(f)]
+    with open('examples/100.tsv') as f:
+        entries = [tuple(entry.strip().split('\t')) for entry in f]
 
         trie_1 = Trie(words=iter(sorted(entries, key=lambda x: x[0])), node_type=StringAttributeNode)
         trie_2 = Trie(node_type=StringAttributeNode)
