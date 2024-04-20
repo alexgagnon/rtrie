@@ -4,4 +4,4 @@ from .node import Candidates, Children, Entry, Node, AttributeNode, StringAttrib
 from .string_trie import StringTrie
 from .array_trie import ArrayTrie
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
