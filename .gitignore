@@ -4,3 +4,4 @@ venv/
 dist/
 data/
 playground.py
+.vscode/
